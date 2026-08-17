@@ -72,5 +72,26 @@ public static class BadgeStateMachineTests
         TestRunner.AssertEqual(BadgeAction.Show, m2.Next(S(true, 10, 10, ImeMode.Off), 0), "sm2/initial-show");
         TestRunner.AssertEqual(BadgeAction.Fade, m2.Next(S(true, 90, 10, ImeMode.Off), 100), "sm2/typing-fades");
         TestRunner.AssertEqual(BadgeAction.None, m2.Next(S(true, 200, 10, ImeMode.Off), 200), "sm2/no-focus-no-show");
+
+        // 累積する微小移動はアンカー基準で測る。直前フレーム基準の実装だと dx が毎回 1 のままで
+        // 永久に Move となり、入力してもバッジが消えないという実使用の不具合になる。
+        // ここは移動量の閾値 (2px) のちょうど境界も兼ねている。
+        BadgeStateMachine m3 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m3.Next(S(true, 100, 100, ImeMode.Off), 0), "sm3/initial-show");
+        TestRunner.AssertEqual(BadgeAction.Move, m3.Next(S(true, 101, 100, ImeMode.Off), 100), "sm3/drift-still-move");
+        TestRunner.AssertEqual(BadgeAction.Fade, m3.Next(S(true, 102, 100, ImeMode.Off), 200), "sm3/drift-from-anchor-fades");
+
+        // 縦方向の移動でも同じ規則が働く（エディタでの行移動が該当する）
+        BadgeStateMachine m4 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m4.Next(S(true, 100, 100, ImeMode.Off), 0), "sm4/initial-show");
+        TestRunner.AssertEqual(BadgeAction.Move, m4.Next(S(true, 100, 101, ImeMode.Off), 100), "sm4/vertical-sub-threshold");
+        TestRunner.AssertEqual(BadgeAction.Fade, m4.Next(S(true, 100, 102, ImeMode.Off), 200), "sm4/vertical-drift-fades");
+
+        // 表示中に別の入力欄へフォーカスが移った場合、アンカーと表示開始時刻が引き直される
+        BadgeStateMachine m5 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m5.Next(S(true, 10, 10, ImeMode.Off), 0), "sm5/initial-show");
+        TestRunner.AssertEqual(BadgeAction.Show, m5.Next(S(true, 500, 300, ImeMode.Off, true), 100), "sm5/focus-change-while-shown");
+        TestRunner.AssertTrue(m5.IsShown, "sm5/still-shown-after-refocus");
+        TestRunner.AssertEqual(BadgeAction.Move, m5.Next(S(true, 500, 300, ImeMode.Off), 200), "sm5/anchor-and-timer-reset");
     }
 }
