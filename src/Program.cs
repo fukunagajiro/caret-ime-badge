@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 public static class Program
 {
@@ -52,6 +53,30 @@ public static class Program
                 Console.WriteLine(i + " caret=" + ok + " rect=" + r);
                 System.Threading.Thread.Sleep(300);
             }
+            return 0;
+        }
+        if (args.Length > 0 && args[0] == "--probe-focus")
+        {
+            AttachConsole(-1);
+            StreamWriter fw = new StreamWriter(Console.OpenStandardOutput());
+            fw.AutoFlush = true;
+            Console.SetOut(fw);
+            FocusHook hook = new FocusHook();
+            Console.WriteLine("installed=" + hook.IsInstalled);
+            for (int i = 0; i < 400; i++)
+            {
+                Application.DoEvents();
+                if (hook.ConsumeFocusChanged())
+                {
+                    IntPtr fg = NativeMethods.GetForegroundWindow();
+                    IntPtr focus = NativeMethods.GetFocusWindow(fg);
+                    System.Drawing.Rectangle r;
+                    bool ok = CaretLocator.TryGetCaret(focus, out r);
+                    Console.WriteLine(i + " FOCUS-CHANGED caret=" + ok + " rect=" + r);
+                }
+                System.Threading.Thread.Sleep(100);
+            }
+            hook.Dispose();
             return 0;
         }
         Console.WriteLine("GUI not implemented yet");
