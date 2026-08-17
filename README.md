@@ -54,7 +54,7 @@ build-test.cmd
 build\selftest.exe --self-test
 ```
 
-終了コードが失敗件数（0 なら全件成功）。現在 95 件のアサーションがある。
+終了コードが失敗件数（0 なら全件成功）。現在 112 件のアサーションがある。
 
 `cursor-ime-mode.exe --self-test` でも同じテストを実行できる（起動時に親コンソールへの接続を試みる）が、出力を確実に確認できるのはコンソール版の `selftest.exe` のほう。
 
@@ -80,7 +80,10 @@ exe と同じディレクトリの `settings.ini`（初回起動時に自動生�
 - **キャレット位置を公開しないアプリでは表示されない。** MSAA と UI Automation のどちらからもキャレット矩形が取れない場合、位置を推測せず何も表示しない。
 - Microsoft IME 以外のサードパーティ IME は未検証。IMM32 互換経路を持つものは動作する見込み。
 - **同じ入力欄でも、キャレットの取得元が MSAA と UI Automation の間で切り替わると、バッジの位置が少しずれることがある。** 実測ではメモ帳で MSAA が `(55,99) 1x15`、UI Automation が `(55,83) 1x31` を返しており、Y座標で16pxのずれがあった。
-- **Chromium 系アプリでテキスト欄以外にフォーカスが移っても、直前の位置に一瞬キャレットが残ることがある想定への対策済み。** Chromium はフォーカスがテキスト以外の要素（ツールバーのボタンなど）へ移っても、エミュレートしたシステムキャレットを破棄しない。MSAA は座標を保持したまま幅だけ 0 になった矩形を返すため、これを「テキスト欄にフォーカスが無い」ことの信号として扱い、UI Automation には問い合わせずにキャレット無しと判定する（Web ページ本体は UI Automation の `TextPattern` に応答してしまい、問い合わせると別位置にバッジが出る不具合になるため）。
+- **Chromium 系アプリでテキスト欄以外にフォーカスが移ると、直前のキャレット位置がフォーカスがそこにとどまる間ずっと残り続けるが、これには対策済み。** Chromium はフォーカスがテキスト以外の要素（ツールバーのボタンなど）へ移っても、エミュレートしたシステムキャレットを破棄しない。MSAA は座標を保持したまま幅だけ 0 になった矩形を返すため、これを「テキスト欄にフォーカスが無い」ことの信号として扱い、UI Automation には問い合わせずにキャレット無しと判定する（Web ページ本体は UI Automation の `TextPattern` に応答してしまい、問い合わせると別位置にバッジが出る不具合になるため）。
+- **エクスプローラーの検索ボックスは MSAA 経由では動作しない。** Windows 11 の XAML 化されたコントロール（`InputSiteWindowClass`）で、MSAA `OBJID_CARET` は全ゼロの矩形を返し、UIA もキャレットを提供しないため、バッジは出ない。実測: `focusCls=InputSiteWindowClass`、MSAA `accFocus` role `CLIENT(0x0A)`、`OBJID_CARET` 全ゼロ、UIA `ControlType.Pane`（`TextPattern` に応答しない）。エクスプローラーで動作するのは F2 名前変更などの古典的な Win32 `Edit` コントロールのみである。なおこれは今回の `CaretLocator` 修正による退行ではない — 修正が変えたのは「位置はあるが面積ゼロ」の矩形の扱いのみで、この検索ボックスがたどる「全ゼロ」の経路は変更されていない。空の入力欄向けの新しいフォールバック（下記）も `ControlType.Pane` には適用されないため、ここは引き続き対象外である。
+- **タスクバーの検索ボックスにフォーカスがあるとき、バッジは描画されているが見えない。** シェルの検索フライアウトが通常のトップモストウィンドウより前面に描画されるため。実測: `proc=SearchHost`、`role=TEXT(0x2A)`、`textPattern=True`（MSAA は全ゼロのため UIA が応答する経路）。空の状態でも下記の「空の入力欄」対策により矩形自体は得られるが、z 順の問題で見えない。回避策は未実装。
+- **空の XAML/WinUI 系入力欄でも、`ControlType.Edit` であればバッジが出る。** メモ帳の `Ctrl+F` 検索ボックス（`focusCls=InputSiteWindowClass`）で実測: MSAA は全ゼロ、UIA は `ControlType=Edit`・`TextPattern=True` だが、文字が 1 つも無いと `TextPattern` は矩形を返せない。この場合に限り、要素自身の `BoundingRectangle` の左端を幅 1px のキャレットとみなす（`CaretLocator.TryEmptyFieldCaret`）。適用条件は `ControlType.Edit` に厳格に限定してあり、`ControlType.Document`（Web ページ本体など、`TextPattern` を持つが編集不可）には適用しない。エクスプローラーの検索欄は `ControlType.Pane` のため、そもそも UIA が `TextPattern` に応答せず本対策の対象外である（前項参照）。
 
 ## 動作確認済み
 
@@ -89,10 +92,12 @@ exe と同じディレクトリの `settings.ini`（初回起動時に自動生�
 | アプリ | 取得元 | 備考 |
 |---|---|---|
 | メモ帳 | MSAA | キャレット矩形 `1x15`。打鍵のたびに正しく追従することを確認済み |
-| エクスプローラーの検索欄 | MSAA | |
+| エクスプローラー（F2 名前変更、Win32 `Edit`） | MSAA | 実測 `(460,441) 1x15`。**Windows 11 の検索ボックスとは別物**（下記参照） |
 | Microsoft Edge | MSAA | UI Automation もこのフィールドに応答するが、位置がずれた矩形を返す。MSAA を先に試す実装が意味を持つのはこのため |
 | Visual Studio Code | MSAA | キャレット矩形 `1x19`。UI Automation は行全体の矩形（実測 `1132x19`）を返してしまい、妥当性ガード（幅が高さの4倍を超える矩形を却下する）で棄却される |
 | Windows Terminal | UI Automation | MSAA はキャレットを取得できず失敗する。UI Automation にフォールバックして `9x19` を得る |
+
+**エクスプローラーで動作しないもの**: Windows 11 の検索ボックス（XAML、`InputSiteWindowClass`）は MSAA が全ゼロの矩形を返し、UIA もキャレットを提供しないため、バッジは出ない（実測 `focusCls=InputSiteWindowClass`、MSAA role `CLIENT(0x0A)`、`OBJID_CARET` 全ゼロ）。ファイル一覧（`DirectUIHWND`、role `LISTITEM(0x22)`）も同様に全ゼロで、こちらは編集不可なコントロールなので意図通り出ない。これらは以前「エクスプローラー検索欄で動作する」と誤って記載していたことの訂正であり、未検証のまま `focusCls=Edit` の観測結果から推測したのが誤りの原因だった。
 
 Chrome と Cursor は開発中に実測セッションを記録していない。どちらも Edge（Chromium）・VS Code（Electron）と同じレンダリングエンジンを使うため同様に動作すると**予想**されるが、**確認はしていない**。Slack・Discord・Teams は開発機に未インストールのため未検証。
 

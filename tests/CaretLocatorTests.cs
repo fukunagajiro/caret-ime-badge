@@ -56,5 +56,36 @@ public static class CaretLocatorTests
             !CaretLocator.ChooseCaret(false, Rectangle.Empty, false, Rectangle.Empty, out got),
             "choose/both-absent");
         TestRunner.AssertEqual(Rectangle.Empty, got, "choose/both-absent-rect-empty");
+
+        // --- TryEmptyFieldCaret: 空の入力欄の救済 ---
+        Rectangle ef;
+
+        // 空の検索ボックス(Edit)は要素の左端をキャレットとみなす
+        TestRunner.AssertTrue(
+            CaretLocator.TryEmptyFieldCaret(true, new Rectangle(207, 100, 300, 32), out ef),
+            "empty/edit-accepted");
+        TestRunner.AssertEqual(new Rectangle(207, 100, 1, 32), ef, "empty/edit-rect");
+
+        // 回帰テスト: Web ページ本体(Document)は TextPattern を持つが編集できない。
+        // ここで受け入れるとページ全体の矩形にバッジを出してしまう。
+        TestRunner.AssertTrue(
+            !CaretLocator.TryEmptyFieldCaret(false, new Rectangle(0, 112, 1920, 920), out ef),
+            "empty/document-rejected");
+        TestRunner.AssertEqual(Rectangle.Empty, ef, "empty/document-rect-empty");
+
+        // オフスクリーン要素は Rect.Empty を返し、int へのキャストで int.MinValue になる
+        TestRunner.AssertTrue(
+            !CaretLocator.TryEmptyFieldCaret(true, new Rectangle(0, 0, int.MinValue, int.MinValue), out ef),
+            "empty/offscreen-rejected");
+
+        // 大きさゼロの要素も弾く
+        TestRunner.AssertTrue(
+            !CaretLocator.TryEmptyFieldCaret(true, new Rectangle(10, 10, 0, 20), out ef),
+            "empty/zero-width-element-rejected");
+
+        // 組み立てた矩形は妥当性ガードを通る(幅1なので必ず通る)
+        Rectangle ef2;
+        CaretLocator.TryEmptyFieldCaret(true, new Rectangle(207, 100, 300, 32), out ef2);
+        TestRunner.AssertTrue(CaretLocator.IsPlausibleCaret(ef2), "empty/synthesized-is-plausible");
     }
 }

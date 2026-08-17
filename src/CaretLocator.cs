@@ -9,9 +9,10 @@ public static class CaretLocator
         new Guid("618736e0-3c3d-11cf-810c-00aa00389b71");
 
     /// <summary>
-    /// UIA が返す矩形がキャレットとして妥当かを判定する。
-    /// UIA は行全体や要素全体を返すことがあり(VS Code 1663x19、Edge 548x40)、
-    /// そのまま使うとバッジが行頭に飛ぶ。
+    /// MSAA / UIA いずれの矩形もキャレットとして妥当かを判定する(ChooseCaret から両方に適用される)。
+    /// UIA は行全体や要素全体を返すことがあり(VS Code 1663x19、Edge 548x40)、そのまま使うと
+    /// バッジが行頭に飛ぶ。MSAA は位置はあるが面積の無い矩形を返すことがあり(Chromium で
+    /// テキスト欄以外にフォーカスがある場合)、そのまま使うと直前の位置にバッジが残り続ける。
     /// </summary>
     public static bool IsPlausibleCaret(Rectangle r)
     {
@@ -100,6 +101,31 @@ public static class CaretLocator
         }
     }
 
+    /// <summary>
+    /// TextPattern が矩形を返さなかったとき、要素自身の矩形からキャレット位置を組み立てる。
+    ///
+    /// 空の入力欄では UIA が矩形を返せないが、そこは「入力前に IME を確認したい」瞬間そのもの
+    /// である。単一行の入力欄なら、空のときのキャレットは要素の左端にある。
+    ///
+    /// isEditControl が false のときは必ず false を返すこと。Web ページ本体は
+    /// ControlType.Document かつ TextPattern を持つが編集できず、ここで受け入れると
+    /// ページ全体の矩形にバッジを出してしまう(実測済み)。
+    /// </summary>
+    public static bool TryEmptyFieldCaret(bool isEditControl, Rectangle elementRect, out Rectangle rect)
+    {
+        rect = Rectangle.Empty;
+        if (!isEditControl)
+        {
+            return false;
+        }
+        if (elementRect.Width <= 0 || elementRect.Height <= 0)
+        {
+            return false;
+        }
+        rect = new Rectangle(elementRect.X, elementRect.Y, 1, elementRect.Height);
+        return true;
+    }
+
     /// <summary>UIA の生の結果。妥当性判定は行わない。</summary>
     public static bool TryUiaCaret(out Rectangle rect)
     {
@@ -136,7 +162,13 @@ public static class CaretLocator
             }
             if (rects.Length < 1)
             {
-                return false;
+                // TextPattern は矩形を返せなかった。空の入力欄(Edit)に限り、要素自身の
+                // 矩形の左端をキャレット位置とみなす。Document(Web ページ本体)などは除外する。
+                bool isEditControl = el.Current.ControlType == ControlType.Edit;
+                System.Windows.Rect er = el.Current.BoundingRectangle;
+                Rectangle elementRect = new Rectangle(
+                    (int)er.X, (int)er.Y, (int)er.Width, (int)er.Height);
+                return TryEmptyFieldCaret(isEditControl, elementRect, out rect);
             }
             System.Windows.Rect r0 = rects[0];
             rect = new Rectangle(
