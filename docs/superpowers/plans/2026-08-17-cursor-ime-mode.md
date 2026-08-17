@@ -40,7 +40,8 @@
 | `src/BadgeStyle.cs` | `ImeMode` → 表示文字と色（純粋） |
 | `src/BadgePlacer.cs` | キャレット矩形 → バッジ座標（純粋） |
 | `src/Sample.cs` | 1 回のポーリング結果を表す構造体 |
-| `src/BadgeStateMachine.cs` | 表示/非表示/移動を決める状態機械（純粋） |
+| `src/BadgeStateMachine.cs` | 表示/非表示/移動と表示時間を決める状態機械（純粋） |
+| `src/FocusHook.cs` | `EVENT_OBJECT_FOCUS` を購読しフォーカス移動を通知 |
 | `src/Settings.cs` | ini のパースと読み込み（パースは純粋） |
 | `src/NativeMethods.cs` | P/Invoke 宣言の集約 |
 | `src/ImeReader.cs` | `WM_IME_CONTROL` による IME 状態取得 |
@@ -613,20 +614,29 @@ git commit -m "feat: 画面端で反転するバッジ配置ロジックを追�
 **Interfaces:**
 - Consumes: `ImeMode`（Task 1）
 - Produces:
-  - `public struct Sample { public bool HasCaret; public Rectangle Caret; public ImeMode Mode; }`
-  - `public enum BadgeAction { None, Show, Hide, Move }`
-  - `public class BadgeStateMachine` — コンストラクタ `BadgeStateMachine(int moveThresholdPx)`、メソッド `public BadgeAction Next(Sample s)`、プロパティ `public bool IsShown { get; }`
+  - `public struct Sample { public bool HasCaret; public Rectangle Caret; public ImeMode Mode; public bool FocusChanged; }`
+  - `public enum BadgeAction { None, Show, Move, Fade, HideNow }`
+  - `public class BadgeStateMachine` — コンストラクタ `BadgeStateMachine(int moveThresholdPx, int showDurationMs)`、メソッド `public BadgeAction Next(Sample s, long nowMs)`、プロパティ `public bool IsShown { get; }`
+
+**表示時間の管理はここに置く。** `BadgeWindow` に持たせるとフェード完了が状態機械に伝わらず、`IsShown` が嘘になって以後の表示判定が全て狂う。時刻は引数で受け取るので、テストでは偽の時計を渡せる。
 
 規則（`Next` 内の判定順）:
 
-1. `!s.HasCaret` → 表示中なら `Hide`、そうでなければ `None`
-2. 直前が `HasCaret=false` → `Show`（入力可能になった）
-3. モードが直前と異なる → `Show`（**モード変化が移動より優先** — 仕様 §5.1 の競合解決）
-4. 表示中かつ、表示時アンカーからの移動量が閾値以上 → `Hide`
-5. 表示中かつ移動量が閾値未満 → `Move`（バッジを追従させる）
-6. それ以外 → `None`
+1. `!s.HasCaret` → 表示中なら `HideNow`（フェードなしで即座に消す）、そうでなければ `None`
+2. 次のいずれかなら `Show`:
+   - 直前が `HasCaret=false`（入力可能になった）
+   - モードが直前と異なる
+   - `s.FocusChanged` が真（別の入力欄にフォーカスが移った）
+3. 表示中でなければ `None`
+4. 表示時アンカーからの移動量が閾値以上 → `Fade`（入力が始まった）
+5. `Show` してから `showDurationMs` 以上経過 → `Fade`
+6. それ以外 → `Move`（バッジを追従させる）
 
-`Show` を返すときは、そのサンプルのキャレット矩形をアンカーとして記録する。移動量は `Show` した時点の座標が基準であり、直前フレームとの差分ではない。
+判定順が仕様 §5.1 の競合解決そのものである。**モード変化とフォーカス移動は移動判定より先に評価されるので、必ず表示が勝つ。**
+
+`Show` を返すときは、そのサンプルのキャレット矩形をアンカーとして、`nowMs` を表示開始時刻として記録する。移動量は `Show` した時点の座標が基準であり、直前フレームとの差分ではない。
+
+**なぜ `FocusChanged` が必要か**: キャレットの有無の変化だけでは「同じウィンドウ内で別の入力欄に移った」を検知できない。バッジがフェードした後に隣の入力欄をクリックすると、キャレットは一度も消えないため移動と判定され、バッジが二度と出なくなる。検証ログでは Edge のアドレスバーもページ内の入力欄も `focusCls=Chrome_WidgetWin_1` で同一なので、フォーカスウィンドウの比較でも解決しない。要素単位で発火する `EVENT_OBJECT_FOCUS`（Task 8）が必要になる。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -639,48 +649,74 @@ public static class BadgeStateMachineTests
 {
     private static Sample S(bool hasCaret, int x, int y, ImeMode mode)
     {
+        return S(hasCaret, x, y, mode, false);
+    }
+
+    private static Sample S(bool hasCaret, int x, int y, ImeMode mode, bool focusChanged)
+    {
         Sample s = new Sample();
         s.HasCaret = hasCaret;
         s.Caret = new Rectangle(x, y, 1, 20);
         s.Mode = mode;
+        s.FocusChanged = focusChanged;
         return s;
     }
 
     public static void Run()
     {
+        BadgeStateMachine m = new BadgeStateMachine(2, 800);
+        long t = 1000;
+
+        // キャレットが無い間は何も起きない
+        TestRunner.AssertEqual(BadgeAction.None, m.Next(S(false, 0, 0, ImeMode.Off), t), "sm/no-caret-initial");
+
         // キャレットが現れたら表示する
-        BadgeStateMachine m = new BadgeStateMachine(2);
-        TestRunner.AssertEqual(BadgeAction.None, m.Next(S(false, 0, 0, ImeMode.Off)), "sm/no-caret-initial");
-        TestRunner.AssertEqual(BadgeAction.Show, m.Next(S(true, 100, 100, ImeMode.Off)), "sm/caret-appeared");
+        TestRunner.AssertEqual(BadgeAction.Show, m.Next(S(true, 100, 100, ImeMode.Off), t), "sm/caret-appeared");
         TestRunner.AssertTrue(m.IsShown, "sm/shown-after-show");
 
         // 閾値未満の移動は追従のみ
-        TestRunner.AssertEqual(BadgeAction.Move, m.Next(S(true, 101, 100, ImeMode.Off)), "sm/sub-threshold-move");
+        TestRunner.AssertEqual(BadgeAction.Move, m.Next(S(true, 101, 100, ImeMode.Off), t + 120), "sm/sub-threshold-move");
         TestRunner.AssertTrue(m.IsShown, "sm/still-shown-after-move");
 
-        // 閾値以上の移動で隠す（入力が始まった）
-        TestRunner.AssertEqual(BadgeAction.Hide, m.Next(S(true, 110, 100, ImeMode.Off)), "sm/moved-hides");
+        // 閾値以上の移動でフェードする（入力が始まった）
+        TestRunner.AssertEqual(BadgeAction.Fade, m.Next(S(true, 110, 100, ImeMode.Off), t + 240), "sm/moved-fades");
         TestRunner.AssertTrue(!m.IsShown, "sm/hidden-after-move");
 
         // 隠れている間の移動では何も起きない
-        TestRunner.AssertEqual(BadgeAction.None, m.Next(S(true, 200, 100, ImeMode.Off)), "sm/move-while-hidden");
+        TestRunner.AssertEqual(BadgeAction.None, m.Next(S(true, 200, 100, ImeMode.Off), t + 360), "sm/move-while-hidden");
 
         // モード変化で再表示する
-        TestRunner.AssertEqual(BadgeAction.Show, m.Next(S(true, 200, 100, ImeMode.Hiragana)), "sm/mode-change-shows");
+        TestRunner.AssertEqual(BadgeAction.Show, m.Next(S(true, 200, 100, ImeMode.Hiragana), t + 480), "sm/mode-change-shows");
 
         // モード変化と移動が同時なら、モード変化が優先されて表示する
-        TestRunner.AssertEqual(BadgeAction.Show, m.Next(S(true, 300, 100, ImeMode.FullAlnum)), "sm/mode-change-beats-move");
+        TestRunner.AssertEqual(BadgeAction.Show, m.Next(S(true, 300, 100, ImeMode.FullAlnum), t + 600), "sm/mode-change-beats-move");
         TestRunner.AssertTrue(m.IsShown, "sm/shown-after-conflict");
 
         // 表示直後は、その位置がアンカーなので移動とみなされない
-        TestRunner.AssertEqual(BadgeAction.Move, m.Next(S(true, 300, 100, ImeMode.FullAlnum)), "sm/anchor-reset-on-show");
+        TestRunner.AssertEqual(BadgeAction.Move, m.Next(S(true, 300, 100, ImeMode.FullAlnum), t + 720), "sm/anchor-reset-on-show");
 
-        // キャレットが消えたら隠す
-        TestRunner.AssertEqual(BadgeAction.Hide, m.Next(S(false, 0, 0, ImeMode.Off)), "sm/caret-gone-hides");
+        // 表示時間を過ぎたらフェードする（表示開始は t+600 なので t+1400 で 800ms 経過）
+        TestRunner.AssertEqual(BadgeAction.Fade, m.Next(S(true, 300, 100, ImeMode.FullAlnum), t + 1400), "sm/show-duration-elapsed");
+        TestRunner.AssertTrue(!m.IsShown, "sm/hidden-after-duration");
+
+        // フェード完了後、同じアプリ内で別の入力欄に移った場合も表示する。
+        // キャレットが一度も消えない経路なので、FocusChanged が無いと再表示できない。
+        TestRunner.AssertEqual(BadgeAction.Show,
+            m.Next(S(true, 700, 400, ImeMode.FullAlnum, true), t + 2000), "sm/focus-change-shows");
+        TestRunner.AssertTrue(m.IsShown, "sm/shown-after-focus-change");
+
+        // キャレットが消えたら即座に隠す（フェードなし）
+        TestRunner.AssertEqual(BadgeAction.HideNow, m.Next(S(false, 0, 0, ImeMode.Off), t + 2100), "sm/caret-gone-hides-now");
         TestRunner.AssertTrue(!m.IsShown, "sm/hidden-after-caret-gone");
 
         // 既に隠れている状態でキャレットが無いままなら何も起きない
-        TestRunner.AssertEqual(BadgeAction.None, m.Next(S(false, 0, 0, ImeMode.Off)), "sm/no-caret-repeat");
+        TestRunner.AssertEqual(BadgeAction.None, m.Next(S(false, 0, 0, ImeMode.Off), t + 2200), "sm/no-caret-repeat");
+
+        // フォーカス移動が無ければ、隠れたままキャレットが飛んでも表示しない
+        BadgeStateMachine m2 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m2.Next(S(true, 10, 10, ImeMode.Off), 0), "sm2/initial-show");
+        TestRunner.AssertEqual(BadgeAction.Fade, m2.Next(S(true, 90, 10, ImeMode.Off), 100), "sm2/typing-fades");
+        TestRunner.AssertEqual(BadgeAction.None, m2.Next(S(true, 200, 10, ImeMode.Off), 200), "sm2/no-focus-no-show");
     }
 }
 ```
@@ -707,6 +743,8 @@ public struct Sample
     public bool HasCaret;
     public Rectangle Caret;
     public ImeMode Mode;
+    /// <summary>直前のティック以降に EVENT_OBJECT_FOCUS が発生したか</summary>
+    public bool FocusChanged;
 }
 ```
 
@@ -720,39 +758,49 @@ public enum BadgeAction
 {
     None,
     Show,
-    Hide,
-    Move
+    Move,
+    /// <summary>フェードアウトを開始する</summary>
+    Fade,
+    /// <summary>フェードせず即座に消す</summary>
+    HideNow
 }
 
 /// <summary>
-/// 仕様 §5.1 の表示規則。Win32 に依存しないため単体テストできる。
+/// 仕様 §5.1 の表示規則。Win32 に依存せず、時刻も引数で受け取るため単体テストできる。
+/// 表示時間の管理をここに置いているのは、BadgeWindow 側に持たせるとフェード完了が
+/// 状態機械に伝わらず IsShown が嘘になり、以後の表示判定が全て狂うため。
 /// </summary>
 public class BadgeStateMachine
 {
     private readonly int _moveThresholdPx;
+    private readonly int _showDurationMs;
     private bool _hasPrev;
     private Sample _prev;
     private bool _shown;
     private Rectangle _anchor;
+    private long _shownAtMs;
 
-    public BadgeStateMachine(int moveThresholdPx)
+    public BadgeStateMachine(int moveThresholdPx, int showDurationMs)
     {
         _moveThresholdPx = moveThresholdPx;
+        _showDurationMs = showDurationMs;
         _hasPrev = false;
         _shown = false;
+        _shownAtMs = 0;
     }
 
     public bool IsShown { get { return _shown; } }
 
-    public BadgeAction Next(Sample s)
+    public BadgeAction Next(Sample s, long nowMs)
     {
-        BadgeAction action = Decide(s);
+        BadgeAction action = Decide(s, nowMs);
         if (action == BadgeAction.Show)
         {
             _shown = true;
             _anchor = s.Caret;
+            _shownAtMs = nowMs;
         }
-        else if (action == BadgeAction.Hide)
+        else if (action == BadgeAction.Fade || action == BadgeAction.HideNow)
         {
             _shown = false;
         }
@@ -761,18 +809,24 @@ public class BadgeStateMachine
         return action;
     }
 
-    private BadgeAction Decide(Sample s)
+    private BadgeAction Decide(Sample s, long nowMs)
     {
         if (!s.HasCaret)
         {
-            return _shown ? BadgeAction.Hide : BadgeAction.None;
+            return _shown ? BadgeAction.HideNow : BadgeAction.None;
         }
+        // 入力可能になった
         if (!_hasPrev || !_prev.HasCaret)
         {
             return BadgeAction.Show;
         }
-        // モード変化は移動より優先する（未確定文字の変換中に切り替えた場合の競合解決）
+        // モード変化とフォーカス移動は移動判定より先に評価する。
+        // これが仕様 §5.1 の競合解決（未確定文字の変換中に切り替えた場合など）。
         if (s.Mode != _prev.Mode)
+        {
+            return BadgeAction.Show;
+        }
+        if (s.FocusChanged)
         {
             return BadgeAction.Show;
         }
@@ -784,7 +838,11 @@ public class BadgeStateMachine
         int dy = Math.Abs(s.Caret.Y - _anchor.Y);
         if (dx >= _moveThresholdPx || dy >= _moveThresholdPx)
         {
-            return BadgeAction.Hide;
+            return BadgeAction.Fade;
+        }
+        if (nowMs - _shownAtMs >= _showDurationMs)
+        {
+            return BadgeAction.Fade;
         }
         return BadgeAction.Move;
     }
@@ -1471,7 +1529,167 @@ git commit -m "feat: MSAA 主・UIA 従のキャレット取得を追加"
 
 ---
 
-### Task 8: BadgeWindow — フォーカスを奪わないオーバーレイ
+### Task 8: FocusHook — フォーカス移動の検知
+
+`BadgeStateMachine` の `FocusChanged` を供給する。**これが無いと、同じウィンドウ内で別の入力欄に移ったときにバッジが出ない**（キャレットが一度も消えないため移動と判定される）。
+
+**Files:**
+- Create: `src/FocusHook.cs`
+- Modify: `src/Program.cs`（`--probe-focus` の一時的な確認経路を追加）
+
+**Interfaces:**
+- Consumes: `NativeMethods`（Task 6）、`CaretLocator`（Task 7）
+- Produces:
+  - `public class FocusHook : IDisposable`
+  - `public bool FocusHook.ConsumeFocusChanged()` — 発生していれば `true` を返しフラグをクリアする
+  - `public bool FocusHook.IsInstalled { get; }`
+
+- [ ] **Step 1: `FocusHook.cs` を書く**
+
+```csharp
+using System;
+using System.Runtime.InteropServices;
+
+/// <summary>
+/// EVENT_OBJECT_FOCUS を購読して「フォーカスが別の要素に移った」ことを記録する。
+/// フォーカスウィンドウ(HWND)の比較では不十分である — 検証ログでは Edge の
+/// アドレスバーもページ内の入力欄も focusCls=Chrome_WidgetWin_1 で同一だった。
+/// アクセシビリティのフォーカスイベントは要素単位で発火するのでこれを使う。
+/// </summary>
+public class FocusHook : IDisposable
+{
+    private const uint EVENT_OBJECT_FOCUS = 0x8005;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    private const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
+
+    private delegate void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+        int idObject, int idChild, uint idEventThread, uint dwmsEventTime);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax,
+        IntPtr hmodWinEventProc, WinEventProc lpfnWinEventProc,
+        uint idProcess, uint idThread, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    // デリゲートを GC させないためフィールドで保持する。
+    // ローカル変数のまま渡すとコールバック時にプロセスが落ちる。
+    private readonly WinEventProc _proc;
+    private IntPtr _hook;
+    private volatile bool _focusChanged;
+
+    public FocusHook()
+    {
+        _proc = OnWinEvent;
+        _hook = SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, IntPtr.Zero,
+            _proc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    }
+
+    public bool IsInstalled
+    {
+        get { return _hook != IntPtr.Zero; }
+    }
+
+    private void OnWinEvent(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+        int idObject, int idChild, uint idEventThread, uint dwmsEventTime)
+    {
+        _focusChanged = true;
+    }
+
+    /// <summary>フォーカス移動が発生していれば true を返し、フラグをクリアする。</summary>
+    public bool ConsumeFocusChanged()
+    {
+        if (!_focusChanged)
+        {
+            return false;
+        }
+        _focusChanged = false;
+        return true;
+    }
+
+    public void Dispose()
+    {
+        if (_hook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_hook);
+            _hook = IntPtr.Zero;
+        }
+    }
+}
+```
+
+`WINEVENT_OUTOFCONTEXT` ではコールバックがフック設置スレッドのメッセージループ経由で届く。呼び出し側にメッセージループが必要である（本体は WinForms、確認経路では `Application.DoEvents()`）。
+
+- [ ] **Step 2: 手動確認用の一時経路を追加する**
+
+`Program.cs` の先頭に `using System.Windows.Forms;` を追加し、以下の分岐を加える:
+
+```csharp
+        if (args.Length > 0 && args[0] == "--probe-focus")
+        {
+            AttachConsole(-1);
+            StreamWriter fw = new StreamWriter(Console.OpenStandardOutput());
+            fw.AutoFlush = true;
+            Console.SetOut(fw);
+            FocusHook hook = new FocusHook();
+            Console.WriteLine("installed=" + hook.IsInstalled);
+            for (int i = 0; i < 400; i++)
+            {
+                Application.DoEvents();
+                if (hook.ConsumeFocusChanged())
+                {
+                    IntPtr fg = NativeMethods.GetForegroundWindow();
+                    IntPtr focus = NativeMethods.GetFocusWindow(fg);
+                    System.Drawing.Rectangle r;
+                    bool ok = CaretLocator.TryGetCaret(focus, out r);
+                    Console.WriteLine(i + " FOCUS-CHANGED caret=" + ok + " rect=" + r);
+                }
+                System.Threading.Thread.Sleep(100);
+            }
+            hook.Dispose();
+            return 0;
+        }
+```
+
+- [ ] **Step 3: 判定を分ける手動確認を実施する**
+
+```bash
+cmd.exe //c "$(pwd -W)\build-test.cmd" && ./build/selftest.exe --probe-focus
+```
+
+40 秒間、以下を順に行う:
+
+1. Edge を開き、**アドレスバーをクリック** → 次に**ページ内の検索欄など別の入力欄をクリック**（これが本番の判定）
+2. VS Code でエディタ内をクリック → 検索ボックス (Ctrl+F) をクリック
+3. メモ帳とエクスプローラー検索欄を行き来する
+
+Expected: `installed=True`。上記のどの操作でも `FOCUS-CHANGED caret=True` が出力される。
+
+**この確認が本タスクの本題である。** Edge のアドレスバー → ページ内入力欄の移動で `FOCUS-CHANGED` が出れば、Chromium 内部の欄移動を検知できることが確定する。
+
+**もし Chromium で `FOCUS-CHANGED` が出なかった場合**: この経路では検知できないと確定するので、`FocusHook` はそのまま残し（他のアプリでは有効）、README の「既知の制約」に「Chromium 系アプリでは、同一ウィンドウ内で入力欄を移動した際にバッジが出ないことがある」と明記して次へ進む。**推測で別の手段を足さないこと。**
+
+- [ ] **Step 4: 自己テストが壊れていないことを確認する**
+
+```bash
+./build/selftest.exe --self-test; echo "EXIT=$?"
+```
+
+Expected: `failures=0` と `EXIT=0`
+
+- [ ] **Step 5: コミット**
+
+```bash
+git add src/FocusHook.cs src/Program.cs
+git commit -m "feat: EVENT_OBJECT_FOCUS によるフォーカス移動検知を追加"
+```
+
+---
+
+### Task 9: BadgeWindow — フォーカスを奪わないオーバーレイ
+
+表示時間の管理は `BadgeStateMachine`（Task 4）にあるので、このウィンドウは**描画とフェードアニメーションだけ**を担当する。いつ消すかを自分で決めてはならない。
 
 **Files:**
 - Create: `src/BadgeWindow.cs`
@@ -1481,9 +1699,10 @@ git commit -m "feat: MSAA 主・UIA 従のキャレット取得を追加"
 - Consumes: `BadgeStyle`, `BadgeStyles`（Task 2）、`Settings`（Task 5）
 - Produces:
   - `public class BadgeWindow : Form`
-  - `public void BadgeWindow.ShowBadge(Point location, ImeMode mode)` — 表示しフェードタイマーを初期化
+  - `public void BadgeWindow.ShowBadge(Point location, ImeMode mode)` — 不透明度を戻して表示する
   - `public void BadgeWindow.MoveBadge(Point location)` — 表示中に位置だけ更新
-  - `public void BadgeWindow.HideBadge()` — 即座に隠す
+  - `public void BadgeWindow.FadeOut()` — `FadeDurationMs` かけて薄くし、消えたら隠す
+  - `public void BadgeWindow.HideNow()` — フェードせず即座に隠す
   - `public Size BadgeWindow.BadgeSize { get; }` — 配置計算に使う
 
 **必須のウィンドウスタイル**（仕様 §7.1、実測でフォーカス奪取ゼロを確認済み）:
@@ -1514,10 +1733,9 @@ public class BadgeWindow : Form
     private const int WS_EX_LAYERED = 0x00080000;
 
     private readonly Settings _settings;
-    private readonly Timer _timer;
+    private readonly Timer _fadeTimer;
     private BadgeStyle _style;
-    private int _elapsedMs;
-    private bool _fading;
+    private int _fadeElapsedMs;
 
     protected override CreateParams CreateParams
     {
@@ -1552,9 +1770,9 @@ public class BadgeWindow : Form
         Opacity = _settings.Opacity;
         DoubleBuffered = true;
 
-        _timer = new Timer();
-        _timer.Interval = 30;
-        _timer.Tick += OnTick;
+        _fadeTimer = new Timer();
+        _fadeTimer.Interval = 30;
+        _fadeTimer.Tick += OnFadeTick;
     }
 
     public Size BadgeSize
@@ -1562,19 +1780,21 @@ public class BadgeWindow : Form
         get { return Size; }
     }
 
+    /// <summary>
+    /// 表示する。いつ消すかは BadgeStateMachine が決めるので、ここでは時間を数えない。
+    /// </summary>
     public void ShowBadge(Point location, ImeMode mode)
     {
+        _fadeTimer.Stop();
+        _fadeElapsedMs = 0;
         _style = BadgeStyles.For(mode);
         Location = location;
-        _elapsedMs = 0;
-        _fading = false;
         Opacity = _settings.Opacity;
         Invalidate();
         if (!Visible)
         {
             Show();
         }
-        _timer.Start();
     }
 
     public void MoveBadge(Point location)
@@ -1585,37 +1805,43 @@ public class BadgeWindow : Form
         }
     }
 
-    public void HideBadge()
+    /// <summary>フェードアウトを開始する。既にフェード中なら何もしない。</summary>
+    public void FadeOut()
     {
-        _timer.Stop();
-        _fading = false;
+        if (!Visible)
+        {
+            return;
+        }
+        if (_settings.FadeDurationMs <= 0)
+        {
+            HideNow();
+            return;
+        }
+        if (_fadeTimer.Enabled)
+        {
+            return;
+        }
+        _fadeElapsedMs = 0;
+        _fadeTimer.Start();
+    }
+
+    public void HideNow()
+    {
+        _fadeTimer.Stop();
+        _fadeElapsedMs = 0;
         if (Visible)
         {
             Hide();
         }
     }
 
-    private void OnTick(object sender, EventArgs e)
+    private void OnFadeTick(object sender, EventArgs e)
     {
-        _elapsedMs += _timer.Interval;
-        if (!_fading)
-        {
-            if (_elapsedMs >= _settings.ShowDurationMs)
-            {
-                _fading = true;
-                _elapsedMs = 0;
-            }
-            return;
-        }
-        if (_settings.FadeDurationMs <= 0)
-        {
-            HideBadge();
-            return;
-        }
-        double ratio = 1.0 - ((double)_elapsedMs / _settings.FadeDurationMs);
+        _fadeElapsedMs += _fadeTimer.Interval;
+        double ratio = 1.0 - ((double)_fadeElapsedMs / _settings.FadeDurationMs);
         if (ratio <= 0.0)
         {
-            HideBadge();
+            HideNow();
             return;
         }
         Opacity = _settings.Opacity * ratio;
@@ -1645,9 +1871,9 @@ public class BadgeWindow : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && _timer != null)
+        if (disposing && _fadeTimer != null)
         {
-            _timer.Dispose();
+            _fadeTimer.Dispose();
         }
         base.Dispose(disposing);
     }
@@ -1656,7 +1882,7 @@ public class BadgeWindow : Form
 
 - [ ] **Step 2: 手動確認用の一時経路を追加する**
 
-`Program.cs` に追加。**この確認が Task 8 の本題**であり、フォーカスを奪わないことを実際に確かめる。
+`Program.cs` に追加。**この確認が Task 9 の本題**であり、フォーカスを奪わないことを実際に確かめる。
 
 ```csharp
         if (args.Length > 0 && args[0] == "--probe-badge")
@@ -1671,7 +1897,13 @@ public class BadgeWindow : Form
             for (int i = 0; i < modes.Length; i++)
             {
                 bw.ShowBadge(new System.Drawing.Point(400, 400 + i * 30), modes[i]);
-                for (int t = 0; t < 60; t++)
+                for (int t = 0; t < 32; t++)   // 約 800ms 表示
+                {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(25);
+                }
+                bw.FadeOut();
+                for (int t = 0; t < 16; t++)   // 約 400ms フェード
                 {
                     Application.DoEvents();
                     System.Threading.Thread.Sleep(25);
@@ -1682,7 +1914,7 @@ public class BadgeWindow : Form
         }
 ```
 
-`Program.cs` の先頭に `using System.Windows.Forms;` を追加する。
+`using System.Windows.Forms;` は Task 8 で追加済みである。
 
 - [ ] **Step 3: ビルドして手動確認する**
 
@@ -1697,7 +1929,7 @@ Expected:
 - かな系は緑、英数系は青、OFF はグレーで表示される
 - **バッジが出ている間も入力が中断されない**（フォーカスが奪われない）
 - バッジをクリックしても下のウィンドウにクリックが通る
-- 1.5 秒ほどで各バッジがフェードアウトする
+- 各バッジが 800ms 表示された後、400ms かけて滑らかに消える
 
 - [ ] **Step 4: 自己テストが壊れていないことを確認する**
 
@@ -1716,22 +1948,25 @@ git commit -m "feat: フォーカスを奪わないバッジウィンドウを�
 
 ---
 
-### Task 9: InputContextWatcher — ポーリングと配線
+### Task 10: InputContextWatcher — ポーリングと配線
 
 **Files:**
 - Create: `src/InputContextWatcher.cs`
 
 **Interfaces:**
-- Consumes: `NativeMethods`, `ImeReader`（Task 6）、`CaretLocator`（Task 7）、`BadgeStateMachine`, `Sample`（Task 4）、`Settings`（Task 5）
+- Consumes: `NativeMethods`, `ImeReader`（Task 6）、`CaretLocator`（Task 7）、`FocusHook`（Task 8）、`BadgeStateMachine`, `Sample`（Task 4）、`Settings`（Task 5）
 - Produces:
   - `public class InputContextWatcher : IDisposable`
   - `public event EventHandler<BadgeEventArgs> ShowRequested`
   - `public event EventHandler<BadgeEventArgs> MoveRequested`
-  - `public event EventHandler HideRequested`
+  - `public event EventHandler FadeRequested`
+  - `public event EventHandler HideNowRequested`
   - `public void Start()` / `public void Stop()`
   - `public class BadgeEventArgs : EventArgs { public Rectangle Caret; public ImeMode Mode; }`
 
 IME 読み取りが 3 回連続で失敗したら隠す（仕様 §8）。失敗が続いていない間は直前のモードを保持する。
+
+時刻は `Stopwatch` から取り、状態機械に渡す。`FocusHook` のフラグは**キャレットの有無によらず毎ティック必ず消費する** — 溜めたままにすると、無関係なフォーカス移動が後で誤って表示を起こす。
 
 - [ ] **Step 1: 実装を書く**
 
@@ -1739,6 +1974,7 @@ IME 読み取りが 3 回連続で失敗したら隠す（仕様 §8）。失敗
 
 ```csharp
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -1760,16 +1996,21 @@ public class InputContextWatcher : IDisposable
 
     private readonly Timer _timer;
     private readonly BadgeStateMachine _machine;
+    private readonly FocusHook _focusHook;
+    private readonly Stopwatch _clock;
     private ImeMode _lastMode;
     private int _imeFailures;
 
     public event EventHandler<BadgeEventArgs> ShowRequested;
     public event EventHandler<BadgeEventArgs> MoveRequested;
-    public event EventHandler HideRequested;
+    public event EventHandler FadeRequested;
+    public event EventHandler HideNowRequested;
 
     public InputContextWatcher(Settings settings)
     {
-        _machine = new BadgeStateMachine(settings.CaretMoveThresholdPx);
+        _machine = new BadgeStateMachine(settings.CaretMoveThresholdPx, settings.ShowDurationMs);
+        _focusHook = new FocusHook();
+        _clock = Stopwatch.StartNew();
         _lastMode = ImeMode.Unknown;
         _imeFailures = 0;
         _timer = new Timer();
@@ -1785,13 +2026,13 @@ public class InputContextWatcher : IDisposable
     public void Stop()
     {
         _timer.Stop();
-        Raise(HideRequested);
+        Raise(HideNowRequested);
     }
 
     private void OnTick(object sender, EventArgs e)
     {
         Sample s = Read();
-        BadgeAction action = _machine.Next(s);
+        BadgeAction action = _machine.Next(s, _clock.ElapsedMilliseconds);
         switch (action)
         {
             case BadgeAction.Show:
@@ -1806,8 +2047,11 @@ public class InputContextWatcher : IDisposable
                     MoveRequested(this, new BadgeEventArgs(s.Caret, s.Mode));
                 }
                 break;
-            case BadgeAction.Hide:
-                Raise(HideRequested);
+            case BadgeAction.Fade:
+                Raise(FadeRequested);
+                break;
+            case BadgeAction.HideNow:
+                Raise(HideNowRequested);
                 break;
         }
     }
@@ -1825,6 +2069,9 @@ public class InputContextWatcher : IDisposable
         Sample s = new Sample();
         s.HasCaret = false;
         s.Mode = _lastMode;
+        // フラグはキャレットの有無によらず毎ティック消費する。
+        // 溜めたままにすると、無関係なフォーカス移動が後で誤って表示を起こす。
+        s.FocusChanged = _focusHook.ConsumeFocusChanged();
 
         IntPtr fg = NativeMethods.GetForegroundWindow();
         IntPtr focus = NativeMethods.GetFocusWindow(fg);
@@ -1864,6 +2111,10 @@ public class InputContextWatcher : IDisposable
             _timer.Stop();
             _timer.Dispose();
         }
+        if (_focusHook != null)
+        {
+            _focusHook.Dispose();
+        }
     }
 }
 ```
@@ -1885,14 +2136,14 @@ git commit -m "feat: ポーリングと状態機械を繋ぐ InputContextWatcher
 
 ---
 
-### Task 10: TrayApp と Program — 常駐アプリとして完成させる
+### Task 11: TrayApp と Program — 常駐アプリとして完成させる
 
 **Files:**
 - Create: `src/TrayApp.cs`
 - Modify: `src/Program.cs`（一時的な `--probe-*` 経路を削除し、本来の起動経路にする）
 
 **Interfaces:**
-- Consumes: `InputContextWatcher`（Task 9）、`BadgeWindow`（Task 8）、`BadgePlacer`（Task 3）、`Settings`（Task 5）
+- Consumes: `InputContextWatcher`（Task 10）、`BadgeWindow`（Task 9）、`BadgePlacer`（Task 3）、`Settings`（Task 5）
 - Produces: `public class TrayApp : IDisposable`、`public void TrayApp.Run()`
 
 トレイメニュー（仕様 §10）: 「一時停止 / 再開」「設定ファイルを開く」「設定を再読み込み」「終了」
@@ -1968,7 +2219,8 @@ public class TrayApp : IDisposable
         _watcher = new InputContextWatcher(_settings);
         _watcher.ShowRequested += OnShow;
         _watcher.MoveRequested += OnMove;
-        _watcher.HideRequested += OnHide;
+        _watcher.FadeRequested += OnFade;
+        _watcher.HideNowRequested += OnHideNow;
         if (!_paused)
         {
             _watcher.Start();
@@ -2007,9 +2259,14 @@ public class TrayApp : IDisposable
         _badge.MoveBadge(PlaceFor(e.Caret));
     }
 
-    private void OnHide(object sender, EventArgs e)
+    private void OnFade(object sender, EventArgs e)
     {
-        _badge.HideBadge();
+        _badge.FadeOut();
+    }
+
+    private void OnHideNow(object sender, EventArgs e)
+    {
+        _badge.HideNow();
     }
 
     private void OnTogglePause(object sender, EventArgs e)
@@ -2067,7 +2324,7 @@ public class TrayApp : IDisposable
 
 - [ ] **Step 2: `Program.cs` を最終形にする**
 
-一時的な `--probe-ime` / `--probe-caret` / `--probe-badge` の分岐を**すべて削除**し、以下に置き換える:
+一時的な `--probe-ime` / `--probe-caret` / `--probe-focus` / `--probe-badge` の分岐を**すべて削除**し、以下に置き換える:
 
 ```csharp
 using System;
@@ -2153,6 +2410,7 @@ Expected:
 - メモ帳の入力欄をクリックするとキャレット横にバッジが一瞬出て消える
 - 半角/全角キーを押すとバッジが再表示され、表示が「あ」↔「A」と変わる
 - 文字を打ち始めるとバッジが消える
+- **バッジが消えた後、別の入力欄をクリックするとまたバッジが出る**（Task 8 のフォーカス検知が効いていること）
 - もう一度 exe を起動しても二重に常駐しない
 - トレイの右クリックメニューから「終了」で終了できる
 
@@ -2165,7 +2423,7 @@ git commit -m "feat: トレイ常駐アプリとして完成させる"
 
 ---
 
-### Task 11: README と手動回帰確認
+### Task 12: README と手動回帰確認
 
 **Files:**
 - Create: `README.md`
@@ -2255,11 +2513,12 @@ exe と同じディレクトリの `settings.ini`（初回起動時に自動生�
 1. メモ帳、エクスプローラー検索欄、Edge、Chrome、VS Code、Cursor、Windows Terminal でそれぞれ入力欄にフォーカスし、バッジがキャレット横に出ること
 2. 各アプリで半角/全角キーを押し、バッジが再表示されモード表示が変わること
 3. 文字を打ち始めるとバッジが消えること
-4. デスクトップやボタンにフォーカスしてもバッジが出ないこと
-5. バッジ表示中も入力が中断されないこと（フォーカスが奪われないこと）
-6. 無変換キーでカタカナに切り替え、「ア」「ｱ」が正しく表示されること
-7. 画面右端の入力欄でバッジが左側に反転すること
-8. 画面上端の入力欄でバッジが下側に反転すること
+4. **バッジが消えた後、同じウィンドウ内の別の入力欄をクリックするとバッジが再び出ること**（Edge のアドレスバー ↔ ページ内入力欄、VS Code のエディタ ↔ 検索ボックスで確認する）
+5. デスクトップやボタンにフォーカスしてもバッジが出ないこと
+6. バッジ表示中も入力が中断されないこと（フォーカスが奪われないこと）
+7. 無変換キーでカタカナに切り替え、「ア」「ｱ」が正しく表示されること
+8. 画面右端の入力欄でバッジが左側に反転すること
+9. 画面上端の入力欄でバッジが下側に反転すること
 
 結果を README の「動作確認済み」節に反映する（動かなかったアプリがあれば「既知の制約」に追記する）。
 
@@ -2286,17 +2545,19 @@ git commit -m "docs: README と手動回帰手順を追加"
 |---|---|
 | §2.3 変換モードのビット値 | Task 1（`ImeDecoder` + 実測値をテストで固定） |
 | §3 実装方式 | Task 1（`build.cmd` / `build-test.cmd`） |
-| §4 アーキテクチャ | Task 1–10（コンポーネントごとに 1 タスク） |
-| §5 データフロー | Task 9（`InputContextWatcher`） |
-| §5.1 表示・非表示の規則 | Task 4（`BadgeStateMachine`） |
+| §4 アーキテクチャ | Task 1–11（コンポーネントごとに 1 タスク） |
+| §5 データフロー | Task 10（`InputContextWatcher`） |
+| §5.1 表示トリガー1「フォーカスが移った」 | Task 8（`FocusHook`）+ Task 4（`FocusChanged`） |
+| §5.1 表示トリガー2「モード変化」 | Task 4（`BadgeStateMachine`） |
+| §5.1 非表示トリガーと競合解決 | Task 4（`BadgeStateMachine`） |
 | §6.1 MSAA 主手段 | Task 7 |
 | §6.2 UIA 補完 + 妥当性ガード | Task 7（`IsPlausibleCaret`） |
 | §6.3 入力可能性の判定 | Task 7（`TryGetCaret` の失敗＝入力不可） |
 | §7 バッジ表示内容 | Task 2（`BadgeStyles`） |
-| §7.1 ウィンドウスタイル | Task 8 |
-| §7.2 配置 | Task 3（`BadgePlacer`）+ Task 10（モニタ選択） |
-| §7.3 DPI | Task 1（`app.manifest`）+ Task 8（`AutoScaleMode.None`） |
-| §8 エラー処理 | Task 1（Unknown）、Task 9（3 回失敗）、Task 7（例外）、Task 10（Mutex） |
-| §9 テスト方針 | Task 1（ランナー）、各タスクのテスト、Task 11（手動回帰） |
-| §10 設定ファイル | Task 5（パース）+ Task 10（トレイメニュー） |
-| §11 スコープ外 | README「既知の制約」に記載（Task 11） |
+| §7.1 ウィンドウスタイル | Task 9 |
+| §7.2 配置 | Task 3（`BadgePlacer`）+ Task 11（モニタ選択） |
+| §7.3 DPI | Task 1（`app.manifest`）+ Task 9（`AutoScaleMode.None`） |
+| §8 エラー処理 | Task 1（Unknown）、Task 10（3 回失敗）、Task 7（例外）、Task 11（Mutex） |
+| §9 テスト方針 | Task 1（ランナー）、各タスクのテスト、Task 12（手動回帰） |
+| §10 設定ファイル | Task 5（パース）+ Task 11（トレイメニュー） |
+| §11 スコープ外 | README「既知の制約」に記載（Task 12） |
