@@ -112,6 +112,14 @@ public static class Program
                     System.Threading.Thread.Sleep(25);
                 }
             }
+            // クリック貫通の確認用に、最後に1つ出したまま保持する。
+            // 7モードの巡回は1つ約800msで位置も動くため、クリックを試す余地がない。
+            bw.ShowBadge(new System.Drawing.Point(400, 400), ImeMode.Hiragana);
+            for (int t = 0; t < 600; t++)   // 約15秒
+            {
+                Application.DoEvents();
+                System.Threading.Thread.Sleep(25);
+            }
             bw.Dispose();
             return 0;
         }

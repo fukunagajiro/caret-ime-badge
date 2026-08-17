@@ -11,6 +11,7 @@ public class BadgeWindow : Form
 
     private readonly Settings _settings;
     private readonly Timer _fadeTimer;
+    private readonly Font _font;
     private BadgeStyle _style;
     private int _fadeElapsedMs;
 
@@ -42,7 +43,8 @@ public class BadgeWindow : Form
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
         BackColor = Color.FromArgb(30, 30, 30);
-        Font = new Font("Yu Gothic UI", _settings.FontSize, FontStyle.Bold, GraphicsUnit.Point);
+        _font = new Font("Yu Gothic UI", _settings.FontSize, FontStyle.Bold, GraphicsUnit.Point);
+        Font = _font;
         Size = new Size(38, 24);
         Opacity = _settings.Opacity;
         DoubleBuffered = true;
@@ -148,9 +150,10 @@ public class BadgeWindow : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && _fadeTimer != null)
+        if (disposing)
         {
-            _fadeTimer.Dispose();
+            if (_fadeTimer != null) { _fadeTimer.Dispose(); }
+            if (_font != null) { _font.Dispose(); }
         }
         base.Dispose(disposing);
     }
