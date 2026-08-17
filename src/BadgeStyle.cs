@@ -14,9 +14,13 @@ public struct BadgeStyle
 
 public static class BadgeStyles
 {
-    private static readonly Color Kana = Color.FromArgb(126, 231, 135);   // 緑
-    private static readonly Color Alnum = Color.FromArgb(121, 192, 255);  // 青
-    private static readonly Color Off = Color.FromArgb(139, 148, 158);    // グレー
+    // トレイアイコン（TrayIcon）もこの色を再利用する。数値をここ以外に複製しないこと。
+    public static readonly Color Kana = Color.FromArgb(126, 231, 135);   // 緑
+    public static readonly Color Alnum = Color.FromArgb(121, 192, 255);  // 青
+    public static readonly Color Off = Color.FromArgb(139, 148, 158);    // グレー
+
+    /// <summary>バッジ本体の背景色。BadgeWindow と TrayIcon の両方が参照する。</summary>
+    public static readonly Color Background = Color.FromArgb(30, 30, 30); // 濃いグレー
 
     public static BadgeStyle For(ImeMode mode)
     {

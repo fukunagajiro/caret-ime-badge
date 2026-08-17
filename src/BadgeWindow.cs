@@ -42,7 +42,7 @@ public class BadgeWindow : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        BackColor = Color.FromArgb(30, 30, 30);
+        BackColor = BadgeStyles.Background;
         _font = new Font("Yu Gothic UI", _settings.FontSize, FontStyle.Bold, GraphicsUnit.Point);
         Font = _font;
         Size = new Size(38, 24);

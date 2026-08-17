@@ -7,6 +7,8 @@ public class TrayApp : IDisposable
 {
     private readonly string _settingsPath;
     private NotifyIcon _icon;
+    // NotifyIcon.Dispose() は割り当てられた Icon を破棄しないので、自前で保持して解放する。
+    private Icon _trayIcon;
     private ToolStripMenuItem _pauseItem;
     private Settings _settings;
     private BadgeWindow _badge;
@@ -28,8 +30,12 @@ public class TrayApp : IDisposable
         }
         _settings = Settings.Load(_settingsPath);
 
+        // アイコンの生成はここで一度だけ行う。BuildPipeline は設定リロードのたびに
+        // 走るので、そちらに置くと再読み込みごとに GDI ハンドルを作り直すことになる。
+        _trayIcon = TrayIcon.Create();
+
         _icon = new NotifyIcon();
-        _icon.Icon = SystemIcons.Application;
+        _icon.Icon = _trayIcon;
         // Text は BuildPipeline がフック状況込みで設定する（起動時・再読み込み時とも）。
         _icon.Visible = true;
 
@@ -170,6 +176,12 @@ public class TrayApp : IDisposable
             _icon.Visible = false;
             _icon.Dispose();
             _icon = null;
+        }
+        // NotifyIcon より後に破棄する。まだ表示に使われている Icon を先に解放しない。
+        if (_trayIcon != null)
+        {
+            _trayIcon.Dispose();
+            _trayIcon = null;
         }
     }
 }

@@ -53,6 +53,13 @@ public static class NativeMethods
         ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out object ppvObject);
 
     /// <summary>
+    /// Bitmap.GetHicon() が返す HICON は GDI+ が所有しないため、使い終わったら
+    /// これで明示的に破棄しなければリークする。
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern bool DestroyIcon(IntPtr hIcon);
+
+    /// <summary>
     /// フォアグラウンドウィンドウのスレッドでフォーカスを持つウィンドウを返す。
     /// 取得できない場合は引数をそのまま返す。
     /// </summary>
