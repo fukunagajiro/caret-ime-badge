@@ -22,18 +22,45 @@ public static class CaretLocator
         return r.Width <= r.Height * 4;
     }
 
-    public static bool TryGetCaret(IntPtr hwndFocus, out Rectangle rect)
+    /// <summary>
+    /// 両手段の生の結果から採用する矩形を決める。純粋関数。
+    ///
+    /// MSAA が「キャレットはあるが面積が無い」と答えた場合、それはテキスト欄に
+    /// フォーカスが無いという意味である(Chromium で実測)。この場合 UIA に問い直しては
+    /// ならない — Web ページ本体は TextPattern を持つため、別位置にバッジを出してしまう。
+    /// </summary>
+    public static bool ChooseCaret(bool msaaOk, Rectangle msaa, bool uiaOk, Rectangle uia, out Rectangle rect)
     {
-        if (TryMsaaCaret(hwndFocus, out rect))
+        if (msaaOk)
         {
-            return true;
+            if (IsPlausibleCaret(msaa))
+            {
+                rect = msaa;
+                return true;
+            }
+            rect = Rectangle.Empty;
+            return false;
         }
-        if (TryUiaCaret(out rect) && IsPlausibleCaret(rect))
+        if (uiaOk && IsPlausibleCaret(uia))
         {
+            rect = uia;
             return true;
         }
         rect = Rectangle.Empty;
         return false;
+    }
+
+    public static bool TryGetCaret(IntPtr hwndFocus, out Rectangle rect)
+    {
+        Rectangle msaa;
+        bool msaaOk = TryMsaaCaret(hwndFocus, out msaa);
+        Rectangle uia = Rectangle.Empty;
+        bool uiaOk = false;
+        if (!msaaOk)
+        {
+            uiaOk = TryUiaCaret(out uia);
+        }
+        return ChooseCaret(msaaOk, msaa, uiaOk, uia, out rect);
     }
 
     /// <summary>MSAA の生の結果。妥当性判定は行わない。</summary>
