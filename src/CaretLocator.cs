@@ -51,17 +51,26 @@ public static class CaretLocator
         return false;
     }
 
-    public static bool TryGetCaret(IntPtr hwndFocus, out Rectangle rect)
+    /// <summary>
+    /// キャレット矩形に加えて、それが実測値ではなく要素の矩形から組み立てられたもの
+    /// (<see cref="TryEmptyFieldCaret"/> 経由)かどうかを返す。MSAA 経路は決して
+    /// 組み立てを行わないため、`!msaaOk` の条件で十分である。
+    /// </summary>
+    public static bool TryGetCaret(IntPtr hwndFocus, out Rectangle rect, out bool isSynthesized)
     {
+        isSynthesized = false;
         Rectangle msaa;
         bool msaaOk = TryMsaaCaret(hwndFocus, out msaa);
         Rectangle uia = Rectangle.Empty;
         bool uiaOk = false;
+        bool uiaSynth = false;
         if (!msaaOk)
         {
-            uiaOk = TryUiaCaret(out uia);
+            uiaOk = TryUiaCaret(out uia, out uiaSynth);
         }
-        return ChooseCaret(msaaOk, msaa, uiaOk, uia, out rect);
+        bool ok = ChooseCaret(msaaOk, msaa, uiaOk, uia, out rect);
+        isSynthesized = ok && !msaaOk && uiaSynth;
+        return ok;
     }
 
     /// <summary>MSAA の生の結果。妥当性判定は行わない。</summary>
@@ -126,10 +135,15 @@ public static class CaretLocator
         return true;
     }
 
-    /// <summary>UIA の生の結果。妥当性判定は行わない。</summary>
-    public static bool TryUiaCaret(out Rectangle rect)
+    /// <summary>
+    /// UIA の生の結果。妥当性判定は行わない。
+    /// <paramref name="isSynthesized"/> は、TextPattern が矩形を返せず
+    /// <see cref="TryEmptyFieldCaret"/> の組み立てた矩形を採用した場合にのみ true になる。
+    /// </summary>
+    public static bool TryUiaCaret(out Rectangle rect, out bool isSynthesized)
     {
         rect = Rectangle.Empty;
+        isSynthesized = false;
         try
         {
             AutomationElement el = AutomationElement.FocusedElement;
@@ -168,7 +182,9 @@ public static class CaretLocator
                 System.Windows.Rect er = el.Current.BoundingRectangle;
                 Rectangle elementRect = new Rectangle(
                     (int)er.X, (int)er.Y, (int)er.Width, (int)er.Height);
-                return TryEmptyFieldCaret(isEditControl, elementRect, out rect);
+                bool synthOk = TryEmptyFieldCaret(isEditControl, elementRect, out rect);
+                isSynthesized = synthOk;
+                return synthOk;
             }
             System.Windows.Rect r0 = rects[0];
             rect = new Rectangle(

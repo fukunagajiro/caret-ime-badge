@@ -17,6 +17,14 @@ public static class BadgeStateMachineTests
         return s;
     }
 
+    /// <summary>組み立てた（要素矩形由来の）キャレット位置を持つサンプル。</summary>
+    private static Sample Syn(bool hasCaret, int x, int y, ImeMode mode)
+    {
+        Sample s = S(hasCaret, x, y, mode);
+        s.CaretIsSynthesized = true;
+        return s;
+    }
+
     public static void Run()
     {
         BadgeStateMachine m = new BadgeStateMachine(2, 800);
@@ -93,5 +101,32 @@ public static class BadgeStateMachineTests
         TestRunner.AssertEqual(BadgeAction.Show, m5.Next(S(true, 500, 300, ImeMode.Off, true), 100), "sm5/focus-change-while-shown");
         TestRunner.AssertTrue(m5.IsShown, "sm5/still-shown-after-refocus");
         TestRunner.AssertEqual(BadgeAction.Move, m5.Next(S(true, 500, 300, ImeMode.Off), 200), "sm5/anchor-and-timer-reset");
+
+        // 組み立てた位置は要素のレイアウトに追従して揺れるため、移動判定を適用しない。
+        // 実測: メモ帳の検索バーは 120ms ごとに最大 95px 揺れる。
+        BadgeStateMachine m6 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m6.Next(Syn(true, 196, 104, ImeMode.Off), 0), "sm6/synth-initial-show");
+        TestRunner.AssertEqual(BadgeAction.None, m6.Next(Syn(true, 225, 105, ImeMode.Off), 120), "sm6/synth-jitter-ignored");
+        TestRunner.AssertEqual(BadgeAction.None, m6.Next(Syn(true, 291, 109, ImeMode.Off), 240), "sm6/synth-large-jitter-ignored");
+        TestRunner.AssertTrue(m6.IsShown, "sm6/still-shown-through-jitter");
+
+        // 表示時間の経過ではフェードする
+        TestRunner.AssertEqual(BadgeAction.Fade, m6.Next(Syn(true, 196, 104, ImeMode.Off), 800), "sm6/synth-duration-fades");
+
+        // 組み立てでない位置には従来通り移動判定が効く（回帰防止）
+        BadgeStateMachine m7 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m7.Next(S(true, 196, 104, ImeMode.Off), 0), "sm7/real-initial-show");
+        TestRunner.AssertEqual(BadgeAction.Fade, m7.Next(S(true, 225, 105, ImeMode.Off), 120), "sm7/real-jitter-fades");
+
+        // 組み立て → 本物 への遷移（利用者が入力を始めた）ではフェードする
+        BadgeStateMachine m8 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m8.Next(Syn(true, 207, 100, ImeMode.Off), 0), "sm8/synth-show");
+        TestRunner.AssertEqual(BadgeAction.Fade, m8.Next(S(true, 207, 110, ImeMode.Off), 120), "sm8/synth-to-real-fades");
+
+        // 組み立てた位置でもモード変化では再表示する
+        BadgeStateMachine m9 = new BadgeStateMachine(2, 800);
+        TestRunner.AssertEqual(BadgeAction.Show, m9.Next(Syn(true, 196, 104, ImeMode.Off), 0), "sm9/synth-show");
+        TestRunner.AssertEqual(BadgeAction.Fade, m9.Next(Syn(true, 196, 104, ImeMode.Off), 800), "sm9/synth-fade");
+        TestRunner.AssertEqual(BadgeAction.Show, m9.Next(Syn(true, 196, 104, ImeMode.Hiragana), 900), "sm9/synth-mode-change-reshows");
     }
 }

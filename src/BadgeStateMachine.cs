@@ -81,6 +81,17 @@ public class BadgeStateMachine
         {
             return BadgeAction.None;
         }
+        if (s.CaretIsSynthesized)
+        {
+            // 組み立てた位置は要素のレイアウトに追従するだけで、ユーザーの操作の証拠ではない。
+            // 実測: メモ帳の検索バーは要素矩形が 120ms ごとに最大 95px 揺れるため、
+            // 移動判定を適用するとバッジが即座に消える。位置も固定する(Move を返さない)。
+            if (nowMs - _shownAtMs >= _showDurationMs)
+            {
+                return BadgeAction.Fade;
+            }
+            return BadgeAction.None;
+        }
         int dx = Math.Abs(s.Caret.X - _anchor.X);
         int dy = Math.Abs(s.Caret.Y - _anchor.Y);
         if (dx >= _moveThresholdPx || dy >= _moveThresholdPx)

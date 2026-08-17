@@ -77,13 +77,13 @@ exe と同じディレクトリの `settings.ini`（初回起動時に自動生�
 ## 既知の制約
 
 - **管理者権限で動くアプリでは表示されない。** Windows の UIPI により、昇格していないプロセスは昇格プロセスのアクセシビリティ情報を読めない。本体を昇格させれば回避できるが、常駐アプリとして割に合わないため対応しない。
-- **キャレット位置を公開しないアプリでは表示されない。** MSAA と UI Automation のどちらからもキャレット矩形が取れない場合、位置を推測せず何も表示しない。
+- **キャレット位置を公開しないアプリでは表示されない。** MSAA と UI Automation のどちらからもキャレット矩形が取れない場合、位置を推測せず何も表示しない。ただし空の `ControlType.Edit` に限り例外があり、要素自身の矩形から位置を組み立てる（下記「空の XAML/WinUI 系入力欄」の項を参照）。
 - Microsoft IME 以外のサードパーティ IME は未検証。IMM32 互換経路を持つものは動作する見込み。
 - **同じ入力欄でも、キャレットの取得元が MSAA と UI Automation の間で切り替わると、バッジの位置が少しずれることがある。** 実測ではメモ帳で MSAA が `(55,99) 1x15`、UI Automation が `(55,83) 1x31` を返しており、Y座標で16pxのずれがあった。
 - **Chromium 系アプリでテキスト欄以外にフォーカスが移ると、直前のキャレット位置がフォーカスがそこにとどまる間ずっと残り続けるが、これには対策済み。** Chromium はフォーカスがテキスト以外の要素（ツールバーのボタンなど）へ移っても、エミュレートしたシステムキャレットを破棄しない。MSAA は座標を保持したまま幅だけ 0 になった矩形を返すため、これを「テキスト欄にフォーカスが無い」ことの信号として扱い、UI Automation には問い合わせずにキャレット無しと判定する（Web ページ本体は UI Automation の `TextPattern` に応答してしまい、問い合わせると別位置にバッジが出る不具合になるため）。
 - **エクスプローラーの検索ボックスは MSAA 経由では動作しない。** Windows 11 の XAML 化されたコントロール（`InputSiteWindowClass`）で、MSAA `OBJID_CARET` は全ゼロの矩形を返し、UIA もキャレットを提供しないため、バッジは出ない。実測: `focusCls=InputSiteWindowClass`、MSAA `accFocus` role `CLIENT(0x0A)`、`OBJID_CARET` 全ゼロ、UIA `ControlType.Pane`（`TextPattern` に応答しない）。エクスプローラーで動作するのは F2 名前変更などの古典的な Win32 `Edit` コントロールのみである。なおこれは今回の `CaretLocator` 修正による退行ではない — 修正が変えたのは「位置はあるが面積ゼロ」の矩形の扱いのみで、この検索ボックスがたどる「全ゼロ」の経路は変更されていない。空の入力欄向けの新しいフォールバック（下記）も `ControlType.Pane` には適用されないため、ここは引き続き対象外である。
 - **タスクバーの検索ボックスにフォーカスがあるとき、バッジは描画されているが見えない。** シェルの検索フライアウトが通常のトップモストウィンドウより前面に描画されるため。実測: `proc=SearchHost`、`role=TEXT(0x2A)`、`textPattern=True`（MSAA は全ゼロのため UIA が応答する経路）。空の状態でも下記の「空の入力欄」対策により矩形自体は得られるが、z 順の問題で見えない。回避策は未実装。
-- **空の XAML/WinUI 系入力欄でも、`ControlType.Edit` であればバッジが出る。** メモ帳の `Ctrl+F` 検索ボックス（`focusCls=InputSiteWindowClass`）で実測: MSAA は全ゼロ、UIA は `ControlType=Edit`・`TextPattern=True` だが、文字が 1 つも無いと `TextPattern` は矩形を返せない。この場合に限り、要素自身の `BoundingRectangle` の左端を幅 1px のキャレットとみなす（`CaretLocator.TryEmptyFieldCaret`）。適用条件は `ControlType.Edit` に厳格に限定してあり、`ControlType.Document`（Web ページ本体など、`TextPattern` を持つが編集不可）には適用しない。エクスプローラーの検索欄は `ControlType.Pane` のため、そもそも UIA が `TextPattern` に応答せず本対策の対象外である（前項参照）。
+- **空の XAML/WinUI 系入力欄でも、`ControlType.Edit` であればバッジが出る。** メモ帳の `Ctrl+F` 検索ボックス（`focusCls=InputSiteWindowClass`）で実測: MSAA は全ゼロ、UIA は `ControlType=Edit`・`TextPattern=True` だが、文字が 1 つも無いと `TextPattern` は矩形を返せない。この場合に限り、要素自身の `BoundingRectangle` の左端を幅 1px のキャレットとみなす（`CaretLocator.TryEmptyFieldCaret`）。適用条件は `ControlType.Edit` に厳格に限定してあり、`ControlType.Document`（Web ページ本体など、`TextPattern` を持つが編集不可）には適用しない。エクスプローラーの検索欄は `ControlType.Pane` のため、そもそも UIA が `TextPattern` に応答せず本対策の対象外である（前項参照）。なおこの組み立てた位置は要素の上端を基準にするため、実際のキャレット（文字の垂直中央付近）より実測で約10pxほど上にずれる。上記の MSAA/UIA 間の16pxのずれと同様、位置の厳密な一致は保証しない。
 
 ## 動作確認済み
 

@@ -111,7 +111,8 @@ public class InputContextWatcher : IDisposable
         IntPtr focus = NativeMethods.GetFocusWindow(fg);
 
         Rectangle caret;
-        if (!CaretLocator.TryGetCaret(focus, out caret))
+        bool caretIsSynthesized;
+        if (!CaretLocator.TryGetCaret(focus, out caret, out caretIsSynthesized))
         {
             return s;
         }
@@ -135,6 +136,7 @@ public class InputContextWatcher : IDisposable
         s.HasCaret = true;
         s.Caret = caret;
         s.Mode = _lastMode;
+        s.CaretIsSynthesized = caretIsSynthesized;
         return s;
     }
 
