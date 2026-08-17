@@ -48,9 +48,17 @@ public static class Program
             {
                 IntPtr fg = NativeMethods.GetForegroundWindow();
                 IntPtr focus = NativeMethods.GetFocusWindow(fg);
-                System.Drawing.Rectangle r;
-                bool ok = CaretLocator.TryGetCaret(focus, out r);
-                Console.WriteLine(i + " caret=" + ok + " rect=" + r);
+                System.Drawing.Rectangle msaa;
+                bool okMsaa = CaretLocator.TryMsaaCaret(focus, out msaa);
+                System.Drawing.Rectangle uia;
+                bool okUia = CaretLocator.TryUiaCaret(out uia);
+                System.Drawing.Rectangle chosen;
+                bool okAny = CaretLocator.TryGetCaret(focus, out chosen);
+                string src = okMsaa ? "msaa" : (okAny ? "uia" : "none");
+                Console.WriteLine(i
+                    + " msaa=" + okMsaa + (okMsaa ? " " + msaa.ToString() : "")
+                    + " | uia=" + okUia + (okUia ? " " + uia.ToString() + " plausible=" + CaretLocator.IsPlausibleCaret(uia) : "")
+                    + " | chosen=" + okAny + (okAny ? " " + chosen.ToString() : "") + " src=" + src);
                 System.Threading.Thread.Sleep(300);
             }
             return 0;
@@ -72,7 +80,8 @@ public static class Program
                     IntPtr focus = NativeMethods.GetFocusWindow(fg);
                     System.Drawing.Rectangle r;
                     bool ok = CaretLocator.TryGetCaret(focus, out r);
-                    Console.WriteLine(i + " FOCUS-CHANGED caret=" + ok + " rect=" + r);
+                    Console.WriteLine(i + " FOCUS-CHANGED fg=[" + DescribeWindow(fg)
+                        + "] focus=[" + DescribeWindow(focus) + "] caret=" + ok + " rect=" + r);
                 }
                 System.Threading.Thread.Sleep(100);
             }
@@ -81,5 +90,28 @@ public static class Program
         }
         Console.WriteLine("GUI not implemented yet");
         return 0;
+    }
+
+    /// <summary>デバッグ用: ウィンドウのクラス名とプロセス名を "class=X proc=Y" の形で返す。</summary>
+    private static string DescribeWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            return "class=(none) proc=(none)";
+        }
+        System.Text.StringBuilder buf = new System.Text.StringBuilder(256);
+        NativeMethods.GetClassName(hwnd, buf, buf.Capacity);
+        int pid;
+        NativeMethods.GetWindowThreadProcessId(hwnd, out pid);
+        string proc;
+        try
+        {
+            proc = System.Diagnostics.Process.GetProcessById(pid).ProcessName;
+        }
+        catch (Exception)
+        {
+            proc = "pid" + pid;
+        }
+        return "class=" + buf.ToString() + " proc=" + proc;
     }
 }

@@ -28,7 +28,7 @@ public static class ImeReader
         {
             return false;
         }
-        int open = result.ToInt32();
+        int open = unchecked((int)result.ToInt64());
 
         ret = NativeMethods.SendMessageTimeout(imeWnd, NativeMethods.WM_IME_CONTROL,
             new IntPtr(NativeMethods.IMC_GETCONVERSIONMODE), IntPtr.Zero,
@@ -37,7 +37,7 @@ public static class ImeReader
         {
             return false;
         }
-        int conv = result.ToInt32();
+        int conv = unchecked((int)result.ToInt64());
 
         mode = ImeDecoder.Decode(open, conv);
         return true;

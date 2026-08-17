@@ -24,15 +24,20 @@ public static class CaretLocator
 
     public static bool TryGetCaret(IntPtr hwndFocus, out Rectangle rect)
     {
-        rect = Rectangle.Empty;
-        if (TryMsaa(hwndFocus, out rect))
+        if (TryMsaaCaret(hwndFocus, out rect))
         {
             return true;
         }
-        return TryUia(out rect);
+        if (TryUiaCaret(out rect) && IsPlausibleCaret(rect))
+        {
+            return true;
+        }
+        rect = Rectangle.Empty;
+        return false;
     }
 
-    private static bool TryMsaa(IntPtr hwnd, out Rectangle rect)
+    /// <summary>MSAA の生の結果。妥当性判定は行わない。</summary>
+    public static bool TryMsaaCaret(IntPtr hwnd, out Rectangle rect)
     {
         rect = Rectangle.Empty;
         if (hwnd == IntPtr.Zero)
@@ -68,7 +73,8 @@ public static class CaretLocator
         }
     }
 
-    private static bool TryUia(out Rectangle rect)
+    /// <summary>UIA の生の結果。妥当性判定は行わない。</summary>
+    public static bool TryUiaCaret(out Rectangle rect)
     {
         rect = Rectangle.Empty;
         try
@@ -106,13 +112,8 @@ public static class CaretLocator
                 return false;
             }
             System.Windows.Rect r0 = rects[0];
-            Rectangle candidate = new Rectangle(
+            rect = new Rectangle(
                 (int)r0.X, (int)r0.Y, (int)r0.Width, (int)r0.Height);
-            if (!IsPlausibleCaret(candidate))
-            {
-                return false;
-            }
-            rect = candidate;
             return true;
         }
         catch (Exception)

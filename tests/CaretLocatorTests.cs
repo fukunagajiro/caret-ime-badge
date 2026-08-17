@@ -17,6 +17,7 @@ public static class CaretLocatorTests
         // 大きさゼロは弾く
         TestRunner.AssertTrue(!CaretLocator.IsPlausibleCaret(new Rectangle(0, 0, 0, 0)), "caret/zero");
         TestRunner.AssertTrue(!CaretLocator.IsPlausibleCaret(new Rectangle(10, 10, 1, 0)), "caret/zero-height");
+        TestRunner.AssertTrue(!CaretLocator.IsPlausibleCaret(new Rectangle(10, 10, 0, 19)), "caret/zero-width");
 
         // 境界: 幅がちょうど高さの 4 倍なら通す、超えたら弾く
         TestRunner.AssertTrue(CaretLocator.IsPlausibleCaret(new Rectangle(0, 0, 80, 20)), "caret/boundary-4x");
