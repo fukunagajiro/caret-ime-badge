@@ -8,6 +8,7 @@ public class Settings
     public int ShowDurationMs = 800;
     public int FadeDurationMs = 200;
     public int CaretMoveThresholdPx = 2;
+    public int MovementGraceMs = 500;
     public int PollIntervalMs = 120;
     public int OffsetX = 6;
     public int OffsetY = -4;
@@ -45,6 +46,7 @@ public class Settings
         if (s.ShowDurationMs < 0) { s.ShowDurationMs = 0; }
         if (s.FadeDurationMs < 0) { s.FadeDurationMs = 0; }
         if (s.CaretMoveThresholdPx < 0) { s.CaretMoveThresholdPx = 0; }
+        if (s.MovementGraceMs < 0) { s.MovementGraceMs = 0; }
         return s;
     }
 
@@ -67,6 +69,9 @@ public class Settings
                 break;
             case "CaretMoveThresholdPx":
                 if (int.TryParse(val, NumberStyles.Integer, inv, out iv)) { s.CaretMoveThresholdPx = iv; }
+                break;
+            case "MovementGraceMs":
+                if (int.TryParse(val, NumberStyles.Integer, inv, out iv)) { s.MovementGraceMs = iv; }
                 break;
             case "PollIntervalMs":
                 if (int.TryParse(val, NumberStyles.Integer, inv, out iv)) { s.PollIntervalMs = iv; }
@@ -113,6 +118,8 @@ public class Settings
             "FadeDurationMs=200",
             "# 入力開始とみなすキャレット移動量 (ピクセル)",
             "CaretMoveThresholdPx=2",
+            "# 表示直後に移動判定を適用しない猶予期間 (ミリ秒)",
+            "MovementGraceMs=500",
             "# ポーリング間隔 (ミリ秒)",
             "PollIntervalMs=120",
             "# キャレットからのバッジ位置オフセット",

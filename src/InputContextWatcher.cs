@@ -67,7 +67,7 @@ public class InputContextWatcher : IDisposable
 
     public InputContextWatcher(Settings settings)
     {
-        _machine = new BadgeStateMachine(settings.CaretMoveThresholdPx, settings.ShowDurationMs);
+        _machine = new BadgeStateMachine(settings.CaretMoveThresholdPx, settings.ShowDurationMs, settings.MovementGraceMs);
         _focusHook = new FocusHook();
         _clock = Stopwatch.StartNew();
         _lastMode = ImeMode.Unknown;

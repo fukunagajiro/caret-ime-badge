@@ -8,6 +8,7 @@ public static class SettingsTests
         TestRunner.AssertEqual(800, d.ShowDurationMs, "settings/default-show");
         TestRunner.AssertEqual(200, d.FadeDurationMs, "settings/default-fade");
         TestRunner.AssertEqual(2, d.CaretMoveThresholdPx, "settings/default-threshold");
+        TestRunner.AssertEqual(500, d.MovementGraceMs, "settings/default-grace");
         TestRunner.AssertEqual(120, d.PollIntervalMs, "settings/default-poll");
         TestRunner.AssertEqual(6, d.OffsetX, "settings/default-offsetx");
         TestRunner.AssertEqual(-4, d.OffsetY, "settings/default-offsety");
@@ -44,5 +45,6 @@ public static class SettingsTests
         TestRunner.AssertEqual(72f, Settings.Parse(new string[] { "FontSize=500" }).FontSize, "settings/clamp-font-high");
         TestRunner.AssertEqual(0, Settings.Parse(new string[] { "ShowDurationMs=-1" }).ShowDurationMs, "settings/clamp-show-negative");
         TestRunner.AssertEqual(0, Settings.Parse(new string[] { "CaretMoveThresholdPx=-5" }).CaretMoveThresholdPx, "settings/clamp-threshold-negative");
+        TestRunner.AssertEqual(0, Settings.Parse(new string[] { "MovementGraceMs=-1" }).MovementGraceMs, "settings/clamp-grace-negative");
     }
 }
