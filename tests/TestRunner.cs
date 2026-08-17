@@ -38,6 +38,7 @@ public static class TestRunner
     {
         Reset();
         ImeDecoderTests.Run();
+        BadgeStyleTests.Run();
         Console.WriteLine("ran=" + _total + " failures=" + _failures);
         return _failures;
     }
