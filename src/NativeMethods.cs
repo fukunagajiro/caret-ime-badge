@@ -38,6 +38,11 @@ public static class NativeMethods
     [DllImport("user32.dll")]
     public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int processId);
 
+    // --probe-trigger の一時計測でウィンドウクラス名をログに出すためだけに追加。
+    // 既存のロジックからは呼ばれない。
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
     [DllImport("user32.dll")]
     public static extern bool GetGUIThreadInfo(int idThread, ref GUITHREADINFO lpgui);
 

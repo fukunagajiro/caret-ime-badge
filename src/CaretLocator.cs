@@ -58,7 +58,19 @@ public static class CaretLocator
     /// </summary>
     public static bool TryGetCaret(IntPtr hwndFocus, out Rectangle rect, out bool isSynthesized)
     {
+        string source;
+        return TryGetCaret(hwndFocus, out rect, out isSynthesized, out source);
+    }
+
+    /// <summary>
+    /// 診断用オーバーロード。挙動は上記と完全に同一(同じ計算を行うだけ)で、
+    /// どちらの経路が採用されたかを "msaa" / "uia" / "uia-synth" / "none" で追加返却する。
+    /// --probe-trigger の一時計測のために追加した。
+    /// </summary>
+    public static bool TryGetCaret(IntPtr hwndFocus, out Rectangle rect, out bool isSynthesized, out string source)
+    {
         isSynthesized = false;
+        source = "none";
         Rectangle msaa;
         bool msaaOk = TryMsaaCaret(hwndFocus, out msaa);
         Rectangle uia = Rectangle.Empty;
@@ -70,6 +82,10 @@ public static class CaretLocator
         }
         bool ok = ChooseCaret(msaaOk, msaa, uiaOk, uia, out rect);
         isSynthesized = ok && !msaaOk && uiaSynth;
+        if (ok)
+        {
+            source = msaaOk ? "msaa" : (isSynthesized ? "uia-synth" : "uia");
+        }
         return ok;
     }
 

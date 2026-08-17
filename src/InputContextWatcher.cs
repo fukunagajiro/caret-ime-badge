@@ -15,6 +15,31 @@ public class BadgeEventArgs : EventArgs
     }
 }
 
+/// <summary>
+/// --probe-trigger の一時計測用。1 ティックぶんの内部状態をそのまま外へ運ぶだけで、
+/// 判定ロジックは一切含まない。計測後にこのクラスごと削除する想定。
+/// </summary>
+public class DiagnosticTickEventArgs : EventArgs
+{
+    public readonly IntPtr Foreground;
+    public readonly IntPtr Focus;
+    public readonly Sample Sample;
+    public readonly string CaretSource;
+    public readonly BadgeAction Action;
+    public readonly bool IsShown;
+
+    public DiagnosticTickEventArgs(IntPtr foreground, IntPtr focus, Sample sample,
+        string caretSource, BadgeAction action, bool isShown)
+    {
+        Foreground = foreground;
+        Focus = focus;
+        Sample = sample;
+        CaretSource = caretSource;
+        Action = action;
+        IsShown = isShown;
+    }
+}
+
 public class InputContextWatcher : IDisposable
 {
     private const int MaxImeFailures = 3;
@@ -26,10 +51,19 @@ public class InputContextWatcher : IDisposable
     private ImeMode _lastMode;
     private int _imeFailures;
 
+    // --probe-trigger 診断用。直近の Read() が観測した値を保持するだけで、
+    // 判定には一切使わない(バッジ表示ロジックからは読まれない)。
+    private IntPtr _lastForeground;
+    private IntPtr _lastFocus;
+    private string _lastCaretSource;
+
     public event EventHandler<BadgeEventArgs> ShowRequested;
     public event EventHandler<BadgeEventArgs> MoveRequested;
     public event EventHandler FadeRequested;
     public event EventHandler HideNowRequested;
+
+    /// <summary>--probe-trigger の一時計測用。毎ティック、判定結果とともに発火する。</summary>
+    public event EventHandler<DiagnosticTickEventArgs> DiagnosticTick;
 
     public InputContextWatcher(Settings settings)
     {
@@ -38,6 +72,9 @@ public class InputContextWatcher : IDisposable
         _clock = Stopwatch.StartNew();
         _lastMode = ImeMode.Unknown;
         _imeFailures = 0;
+        _lastForeground = IntPtr.Zero;
+        _lastFocus = IntPtr.Zero;
+        _lastCaretSource = "none";
         _timer = new Timer();
         _timer.Interval = settings.PollIntervalMs;
         _timer.Tick += OnTick;
@@ -67,6 +104,11 @@ public class InputContextWatcher : IDisposable
     {
         Sample s = Read();
         BadgeAction action = _machine.Next(s, _clock.ElapsedMilliseconds);
+        if (DiagnosticTick != null)
+        {
+            DiagnosticTick(this, new DiagnosticTickEventArgs(
+                _lastForeground, _lastFocus, s, _lastCaretSource, action, _machine.IsShown));
+        }
         switch (action)
         {
             case BadgeAction.Show:
@@ -109,10 +151,15 @@ public class InputContextWatcher : IDisposable
 
         IntPtr fg = NativeMethods.GetForegroundWindow();
         IntPtr focus = NativeMethods.GetFocusWindow(fg);
+        _lastForeground = fg;
+        _lastFocus = focus;
 
         Rectangle caret;
         bool caretIsSynthesized;
-        if (!CaretLocator.TryGetCaret(focus, out caret, out caretIsSynthesized))
+        string caretSource;
+        bool caretOk = CaretLocator.TryGetCaret(focus, out caret, out caretIsSynthesized, out caretSource);
+        _lastCaretSource = caretSource;
+        if (!caretOk)
         {
             return s;
         }
