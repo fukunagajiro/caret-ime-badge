@@ -20,6 +20,23 @@ public static class Program
             Console.SetOut(sw);
             return TestRunner.RunAll();
         }
+        if (args.Length > 0 && args[0] == "--probe-ime")
+        {
+            AttachConsole(-1);
+            StreamWriter pw = new StreamWriter(Console.OpenStandardOutput());
+            pw.AutoFlush = true;
+            Console.SetOut(pw);
+            for (int i = 0; i < 100; i++)
+            {
+                IntPtr fg = NativeMethods.GetForegroundWindow();
+                IntPtr focus = NativeMethods.GetFocusWindow(fg);
+                ImeMode m;
+                bool ok = ImeReader.TryRead(focus, out m);
+                Console.WriteLine(i + " ok=" + ok + " mode=" + m);
+                System.Threading.Thread.Sleep(300);
+            }
+            return 0;
+        }
         Console.WriteLine("GUI not implemented yet");
         return 0;
     }
