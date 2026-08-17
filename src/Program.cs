@@ -24,13 +24,6 @@ public static class Program
             return TestRunner.RunAll();
         }
 
-        // 一時的な目視確認用。アイコンを PNG に書き出して終了する。
-        // 実装者はアイコンを見られないので、描いたものを人が判断できるようにする。
-        if (args.Length > 1 && args[0] == "--dump-icon")
-        {
-            return DumpIcon(args[1]);
-        }
-
         bool createdNew;
         Mutex mutex = new Mutex(true, "Local\\caret-ime-badge", out createdNew);
         if (!createdNew)
@@ -61,64 +54,6 @@ public static class Program
         {
             mutex.ReleaseMutex();
             mutex.Close();
-        }
-    }
-
-    /// <summary>
-    /// トレイアイコンを PNG に書き出す（一時的な目視確認用）。
-    /// 透明のままだと見づらいので、濃い背景・明るい背景に重ねた版も出す。
-    /// Windows 11 のタスクバーはライト／ダークの両方があり、
-    /// 片方でしか見えないアイコンは失敗なので、両方で確認できるようにする。
-    /// </summary>
-    private static int DumpIcon(string outDir)
-    {
-        try
-        {
-            Directory.CreateDirectory(outDir);
-            using (System.Drawing.Icon icon = TrayIcon.Create())
-            using (System.Drawing.Bitmap src = icon.ToBitmap())
-            {
-                Save(src, 32, outDir);
-                Save(src, 16, outDir);
-            }
-            return 0;
-        }
-        catch (Exception)
-        {
-            return 1;
-        }
-    }
-
-    private static void Save(System.Drawing.Bitmap src, int size, string outDir)
-    {
-        using (System.Drawing.Bitmap scaled = new System.Drawing.Bitmap(size, size,
-            System.Drawing.Imaging.PixelFormat.Format32bppArgb))
-        {
-            using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(scaled))
-            {
-                // 単純な縮小だと実際の表示より汚く見え、判断を誤る。
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-                g.Clear(System.Drawing.Color.Transparent);
-                g.DrawImage(src, 0, 0, size, size);
-            }
-            string stem = Path.Combine(outDir, "icon-" + size);
-            scaled.Save(stem + ".png", System.Drawing.Imaging.ImageFormat.Png);
-            SaveOver(scaled, System.Drawing.Color.FromArgb(32, 32, 32), stem + "-dark.png");
-            SaveOver(scaled, System.Drawing.Color.FromArgb(243, 243, 243), stem + "-light.png");
-        }
-    }
-
-    private static void SaveOver(System.Drawing.Bitmap src, System.Drawing.Color back, string path)
-    {
-        using (System.Drawing.Bitmap composed = new System.Drawing.Bitmap(src.Width, src.Height))
-        {
-            using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(composed))
-            {
-                g.Clear(back);
-                g.DrawImageUnscaled(src, 0, 0);
-            }
-            composed.Save(path, System.Drawing.Imaging.ImageFormat.Png);
         }
     }
 }
