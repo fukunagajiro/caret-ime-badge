@@ -21,18 +21,16 @@ public class BadgeStateMachine
 {
     private readonly int _moveThresholdPx;
     private readonly int _showDurationMs;
-    private readonly int _movementGraceMs;
     private bool _hasPrev;
     private Sample _prev;
     private bool _shown;
     private Rectangle _anchor;
     private long _shownAtMs;
 
-    public BadgeStateMachine(int moveThresholdPx, int showDurationMs, int movementGraceMs)
+    public BadgeStateMachine(int moveThresholdPx, int showDurationMs)
     {
         _moveThresholdPx = moveThresholdPx;
         _showDurationMs = showDurationMs;
-        _movementGraceMs = movementGraceMs;
         _hasPrev = false;
         _shown = false;
         _shownAtMs = 0;
@@ -48,12 +46,6 @@ public class BadgeStateMachine
             _shown = true;
             _anchor = s.Caret;
             _shownAtMs = nowMs;
-        }
-        else if (action == BadgeAction.Move && _shown && nowMs - _shownAtMs < _movementGraceMs)
-        {
-            // 猶予期間中は基準点を更新し続ける。更新しないと、猶予明けに
-            // 猶予中の移動がまとめて「入力開始」と判定されて即座に消える。
-            _anchor = s.Caret;
         }
         else if (action == BadgeAction.Fade || action == BadgeAction.HideNow)
         {
@@ -88,25 +80,6 @@ public class BadgeStateMachine
         if (!_shown)
         {
             return BadgeAction.None;
-        }
-        if (s.CaretIsSynthesized)
-        {
-            // 組み立てた位置は要素のレイアウトに追従するだけで、ユーザーの操作の証拠ではない。
-            // 実測: メモ帳の検索バーは要素矩形が 120ms ごとに最大 95px 揺れるため、
-            // 移動判定を適用するとバッジが即座に消える。位置も固定する(Move を返さない)。
-            if (nowMs - _shownAtMs >= _showDurationMs)
-            {
-                return BadgeAction.Fade;
-            }
-            return BadgeAction.None;
-        }
-        // 表示直後の一定時間は移動判定を適用しない。
-        // キャレットはユーザーの入力以外でも動く(コンソールの出力、XAML のレイアウト)。
-        // 実測: Windows Terminal の新規タブでシェルがプロンプトを出力する間に
-        // キャレットが 34,75 → 34,132 → 196,132 と動き、バッジが 120〜380ms で消えていた。
-        if (nowMs - _shownAtMs < _movementGraceMs)
-        {
-            return BadgeAction.Move;
         }
         int dx = Math.Abs(s.Caret.X - _anchor.X);
         int dy = Math.Abs(s.Caret.Y - _anchor.Y);
