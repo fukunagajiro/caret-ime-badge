@@ -88,7 +88,8 @@ Win32 依存部と純粋ロジックを分離する。純粋ロジックのみ�
 | `InputContextWatcher` | ポーリングで 1 サンプル収集し、状態機械を駆動してイベント化 | 上記 |
 | `BadgePlacer` | キャレット矩形＋画面情報 → バッジ座標。**純粋関数** | なし |
 | `BadgeWindow` | `NOACTIVATE` レイヤード窓の描画とフェードアニメーション | WinForms |
-| `TrayApp` | NotifyIcon、設定読込、多重起動防止、寿命管理 | 全部 |
+| `TrayApp` | NotifyIcon、設定読込、寿命管理 | 全部 |
+| `Program` | エントリポイント、多重起動防止（`Mutex`）、`--self-test` 分岐 | `TrayApp` |
 
 ## 5. データフロー
 

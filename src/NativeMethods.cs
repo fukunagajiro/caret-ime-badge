@@ -52,9 +52,6 @@ public static class NativeMethods
     public static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint objectId,
         ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out object ppvObject);
 
-    [DllImport("kernel32.dll")]
-    public static extern bool AttachConsole(int processId);
-
     /// <summary>
     /// フォアグラウンドウィンドウのスレッドでフォーカスを持つウィンドウを返す。
     /// 取得できない場合は引数をそのまま返す。

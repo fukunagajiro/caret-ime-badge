@@ -144,7 +144,7 @@ public class TrayApp : IDisposable
             {
                 Settings.WriteDefault(_settingsPath);
             }
-            System.Diagnostics.Process.Start("notepad.exe", _settingsPath);
+            System.Diagnostics.Process.Start("notepad.exe", "\"" + _settingsPath + "\"");
         }
         catch (Exception) { }
     }
