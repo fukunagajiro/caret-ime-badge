@@ -37,6 +37,23 @@ public static class Program
             }
             return 0;
         }
+        if (args.Length > 0 && args[0] == "--probe-caret")
+        {
+            AttachConsole(-1);
+            StreamWriter cw = new StreamWriter(Console.OpenStandardOutput());
+            cw.AutoFlush = true;
+            Console.SetOut(cw);
+            for (int i = 0; i < 100; i++)
+            {
+                IntPtr fg = NativeMethods.GetForegroundWindow();
+                IntPtr focus = NativeMethods.GetFocusWindow(fg);
+                System.Drawing.Rectangle r;
+                bool ok = CaretLocator.TryGetCaret(focus, out r);
+                Console.WriteLine(i + " caret=" + ok + " rect=" + r);
+                System.Threading.Thread.Sleep(300);
+            }
+            return 0;
+        }
         Console.WriteLine("GUI not implemented yet");
         return 0;
     }
