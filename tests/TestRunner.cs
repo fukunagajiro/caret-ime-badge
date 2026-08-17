@@ -41,6 +41,7 @@ public static class TestRunner
         BadgeStyleTests.Run();
         BadgePlacerTests.Run();
         SettingsTests.Run();
+        BadgeStateMachineTests.Run();
         Console.WriteLine("ran=" + _total + " failures=" + _failures);
         return _failures;
     }
