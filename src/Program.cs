@@ -88,6 +88,33 @@ public static class Program
             hook.Dispose();
             return 0;
         }
+        if (args.Length > 0 && args[0] == "--probe-badge")
+        {
+            Application.EnableVisualStyles();
+            Settings st = new Settings();
+            BadgeWindow bw = new BadgeWindow(st);
+            ImeMode[] modes = new ImeMode[] {
+                ImeMode.Hiragana, ImeMode.FullKatakana, ImeMode.HalfKatakana,
+                ImeMode.FullAlnum, ImeMode.HalfAlnum, ImeMode.Off, ImeMode.Unknown
+            };
+            for (int i = 0; i < modes.Length; i++)
+            {
+                bw.ShowBadge(new System.Drawing.Point(400, 400 + i * 30), modes[i]);
+                for (int t = 0; t < 32; t++)   // 約 800ms 表示
+                {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(25);
+                }
+                bw.FadeOut();
+                for (int t = 0; t < 16; t++)   // 約 400ms フェード
+                {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(25);
+                }
+            }
+            bw.Dispose();
+            return 0;
+        }
         Console.WriteLine("GUI not implemented yet");
         return 0;
     }
