@@ -38,6 +38,13 @@ public class Settings
         }
         if (s.Opacity > 1.0) { s.Opacity = 1.0; }
         if (s.Opacity < 0.1) { s.Opacity = 0.1; }
+        if (s.PollIntervalMs < 16) { s.PollIntervalMs = 16; }
+        if (s.PollIntervalMs > 5000) { s.PollIntervalMs = 5000; }
+        if (s.FontSize < 4f) { s.FontSize = 4f; }
+        if (s.FontSize > 72f) { s.FontSize = 72f; }
+        if (s.ShowDurationMs < 0) { s.ShowDurationMs = 0; }
+        if (s.FadeDurationMs < 0) { s.FadeDurationMs = 0; }
+        if (s.CaretMoveThresholdPx < 0) { s.CaretMoveThresholdPx = 0; }
         return s;
     }
 

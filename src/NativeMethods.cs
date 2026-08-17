@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Text;
 
 public static class NativeMethods
 {
@@ -41,9 +40,6 @@ public static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool GetGUIThreadInfo(int idThread, ref GUITHREADINFO lpgui);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern int GetClassName(IntPtr hWnd, StringBuilder buf, int count);
 
     [DllImport("imm32.dll")]
     public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hWnd);

@@ -30,7 +30,7 @@ public class TrayApp : IDisposable
 
         _icon = new NotifyIcon();
         _icon.Icon = SystemIcons.Application;
-        _icon.Text = "cursor-ime-mode";
+        // Text は BuildPipeline がフック状況込みで設定する（起動時・再読み込み時とも）。
         _icon.Visible = true;
 
         ContextMenuStrip menu = new ContextMenuStrip();
@@ -66,6 +66,9 @@ public class TrayApp : IDisposable
         _watcher.MoveRequested += OnMove;
         _watcher.FadeRequested += OnFade;
         _watcher.HideNowRequested += OnHideNow;
+        _icon.Text = _watcher.HookInstalled
+            ? "cursor-ime-mode"
+            : "cursor-ime-mode (フォーカス検知が無効)";
         if (!_paused)
         {
             _watcher.Start();
@@ -96,26 +99,31 @@ public class TrayApp : IDisposable
 
     private void OnShow(object sender, BadgeEventArgs e)
     {
+        if (_badge == null || _badge.IsDisposed) { return; }
         _badge.ShowBadge(PlaceFor(e.Caret), e.Mode);
     }
 
     private void OnMove(object sender, BadgeEventArgs e)
     {
+        if (_badge == null || _badge.IsDisposed) { return; }
         _badge.MoveBadge(PlaceFor(e.Caret));
     }
 
     private void OnFade(object sender, EventArgs e)
     {
+        if (_badge == null || _badge.IsDisposed) { return; }
         _badge.FadeOut();
     }
 
     private void OnHideNow(object sender, EventArgs e)
     {
+        if (_badge == null || _badge.IsDisposed) { return; }
         _badge.HideNow();
     }
 
     private void OnTogglePause(object sender, EventArgs e)
     {
+        if (_watcher == null) { return; }
         _paused = !_paused;
         _pauseItem.Text = _paused ? "再開" : "一時停止";
         if (_paused)

@@ -43,6 +43,15 @@ public class InputContextWatcher : IDisposable
         _timer.Tick += OnTick;
     }
 
+    /// <summary>
+    /// フォーカス移動検知(EVENT_OBJECT_FOCUS フック)が有効かどうか。
+    /// false の場合、キャレット移動を伴わないフォーカス変更ではバッジが再表示されない。
+    /// </summary>
+    public bool HookInstalled
+    {
+        get { return _focusHook.IsInstalled; }
+    }
+
     public void Start()
     {
         _timer.Start();

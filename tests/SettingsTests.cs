@@ -35,5 +35,14 @@ public static class SettingsTests
         // Opacity は 0.1〜1.0 にクランプする
         TestRunner.AssertEqual(1.0, Settings.Parse(new string[] { "Opacity=5" }).Opacity, "settings/clamp-high");
         TestRunner.AssertEqual(0.1, Settings.Parse(new string[] { "Opacity=0" }).Opacity, "settings/clamp-low");
+
+        // 範囲外の値はクランプする。ini は利用者が編集する前提で自動生成されるため、
+        // 設定ミスがそのまま起動時例外になってはならない。
+        TestRunner.AssertEqual(16, Settings.Parse(new string[] { "PollIntervalMs=0" }).PollIntervalMs, "settings/clamp-poll-low");
+        TestRunner.AssertEqual(5000, Settings.Parse(new string[] { "PollIntervalMs=999999" }).PollIntervalMs, "settings/clamp-poll-high");
+        TestRunner.AssertEqual(4f, Settings.Parse(new string[] { "FontSize=0" }).FontSize, "settings/clamp-font-low");
+        TestRunner.AssertEqual(72f, Settings.Parse(new string[] { "FontSize=500" }).FontSize, "settings/clamp-font-high");
+        TestRunner.AssertEqual(0, Settings.Parse(new string[] { "ShowDurationMs=-1" }).ShowDurationMs, "settings/clamp-show-negative");
+        TestRunner.AssertEqual(0, Settings.Parse(new string[] { "CaretMoveThresholdPx=-5" }).CaretMoveThresholdPx, "settings/clamp-threshold-negative");
     }
 }
