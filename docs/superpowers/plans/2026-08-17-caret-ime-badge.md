@@ -1,4 +1,4 @@
-# cursor-ime-mode Implementation Plan
+# caret-ime-badge Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,13 +8,13 @@
 
 **Tech Stack:** C# 5（Windows 標準搭載の `csc.exe`、.NET SDK 不要）、WinForms、MSAA (`oleacc.dll`)、UI Automation、IMM32
 
-**Spec:** `docs/superpowers/specs/2026-08-17-cursor-ime-mode-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-17-caret-ime-badge-design.md`
 
 ## Global Constraints
 
 - **コンパイラ**: `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`（C# 5 相当）。**文字列補間 `$""`、式形式メンバー `=>`、`nameof`、`out var`、auto-property 初期化子は使用不可。** プロパティは明示的な getter/setter かフィールドで書く。
 - **外部依存ゼロ**: NuGet、.NET SDK、テストフレームワークを一切使わない。参照するのは Windows に同梱されているアセンブリのみ。
-- **成果物**: `build\cursor-ime-mode.exe`（winexe）1 つ + `settings.ini`
+- **成果物**: `build\caret-ime-badge.exe`（winexe）1 つ + `settings.ini`
 - **参照アセンブリの絶対パス**（実機で確認済み）:
   - `C:\Windows\Microsoft.NET\assembly\GAC_MSIL\UIAutomationClient\v4.0_4.0.0.0__31bf3856ad364e35\UIAutomationClient.dll`
   - `C:\Windows\Microsoft.NET\assembly\GAC_MSIL\UIAutomationTypes\v4.0_4.0.0.0__31bf3856ad364e35\UIAutomationTypes.dll`
@@ -92,7 +92,7 @@ settings.ini
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="1.0.0.0" name="cursor-ime-mode" type="win32" />
+  <assemblyIdentity version="1.0.0.0" name="caret-ime-badge" type="win32" />
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
@@ -143,7 +143,7 @@ cd /d "%~dp0"
 set CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 set GAC=C:\Windows\Microsoft.NET\assembly\GAC_MSIL
 if not exist build mkdir build
-"%CSC%" /nologo /target:winexe /platform:x64 /out:build\cursor-ime-mode.exe ^
+"%CSC%" /nologo /target:winexe /platform:x64 /out:build\caret-ime-badge.exe ^
   /win32manifest:app.manifest ^
   /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll ^
   /r:Accessibility.dll ^
@@ -343,7 +343,7 @@ Expected: `ran=11 failures=0` と `EXIT=0`
 - [ ] **Step 7: winexe もビルドできることを確認する**
 
 ```bash
-cmd.exe //c "$(pwd -W)\build.cmd" && ls -l build/cursor-ime-mode.exe
+cmd.exe //c "$(pwd -W)\build.cmd" && ls -l build/caret-ime-badge.exe
 ```
 
 Expected: エラーなくビルドされ、exe が存在する
@@ -1043,7 +1043,7 @@ public class Settings
     public static void WriteDefault(string path)
     {
         string[] lines = new string[] {
-            "# cursor-ime-mode 設定ファイル",
+            "# caret-ime-badge 設定ファイル",
             "# 値を変更したらトレイメニューの「設定を再読み込み」を実行してください。",
             "",
             "# バッジの不透明度 (0.1 - 1.0)",
@@ -2185,7 +2185,7 @@ public class TrayApp : IDisposable
 
         _icon = new NotifyIcon();
         _icon.Icon = SystemIcons.Application;
-        _icon.Text = "cursor-ime-mode";
+        _icon.Text = "caret-ime-badge";
         _icon.Visible = true;
 
         ContextMenuStrip menu = new ContextMenuStrip();
@@ -2354,7 +2354,7 @@ public static class Program
         }
 
         bool createdNew;
-        Mutex mutex = new Mutex(true, "Local\\cursor-ime-mode", out createdNew);
+        Mutex mutex = new Mutex(true, "Local\\caret-ime-badge", out createdNew);
         if (!createdNew)
         {
             return 0;
@@ -2399,10 +2399,10 @@ Expected: `failures=0` と `EXIT=0`
 - [ ] **Step 4: 製品版をビルドして起動する**
 
 ```bash
-cmd.exe //c "$(pwd -W)\build.cmd" && ls -l build/cursor-ime-mode.exe
+cmd.exe //c "$(pwd -W)\build.cmd" && ls -l build/caret-ime-badge.exe
 ```
 
-その後、エクスプローラーから `build\cursor-ime-mode.exe` をダブルクリックして起動する。
+その後、エクスプローラーから `build\caret-ime-badge.exe` をダブルクリックして起動する。
 
 Expected:
 - タスクトレイにアイコンが出る
@@ -2431,7 +2431,7 @@ git commit -m "feat: トレイ常駐アプリとして完成させる"
 - [ ] **Step 1: `README.md` を書く**
 
 ````markdown
-# cursor-ime-mode
+# caret-ime-badge
 
 Windows で文字を入力する前に IME の状態を確認できるように、**テキストキャレットのすぐ横に IME の状態バッジを一瞬だけ表示する**常駐ツール。
 
@@ -2464,7 +2464,7 @@ Windows で文字を入力する前に IME の状態を確認できるように�
 build.cmd
 ```
 
-`build\cursor-ime-mode.exe` ができる。ダブルクリックで起動するとトレイに常駐する。
+`build\caret-ime-badge.exe` ができる。ダブルクリックで起動するとトレイに常駐する。
 
 ## テスト
 
@@ -2508,7 +2508,7 @@ exe と同じディレクトリの `settings.ini`（初回起動時に自動生�
 
 - [ ] **Step 2: 手動回帰確認を実施する**（仕様 §9.3）
 
-`build\cursor-ime-mode.exe` を起動した状態で、以下を順に確認する。
+`build\caret-ime-badge.exe` を起動した状態で、以下を順に確認する。
 
 1. メモ帳、エクスプローラー検索欄、Edge、Chrome、VS Code、Cursor、Windows Terminal でそれぞれ入力欄にフォーカスし、バッジがキャレット横に出ること
 2. 各アプリで半角/全角キーを押し、バッジが再表示されモード表示が変わること

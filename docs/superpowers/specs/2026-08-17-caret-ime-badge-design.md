@@ -1,4 +1,4 @@
-# cursor-ime-mode 設計仕様
+# caret-ime-badge 設計仕様
 
 作成日: 2026-08-17
 

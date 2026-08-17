@@ -67,8 +67,8 @@ public class TrayApp : IDisposable
         _watcher.FadeRequested += OnFade;
         _watcher.HideNowRequested += OnHideNow;
         _icon.Text = _watcher.HookInstalled
-            ? "cursor-ime-mode"
-            : "cursor-ime-mode (フォーカス検知が無効)";
+            ? "caret-ime-badge"
+            : "caret-ime-badge (フォーカス検知が無効)";
         if (!_paused)
         {
             _watcher.Start();

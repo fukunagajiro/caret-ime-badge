@@ -102,7 +102,7 @@ public class Settings
     public static void WriteDefault(string path)
     {
         string[] lines = new string[] {
-            "# cursor-ime-mode 設定ファイル",
+            "# caret-ime-badge 設定ファイル",
             "# 値を変更したらトレイメニューの「設定を再読み込み」を実行してください。",
             "",
             "# バッジの不透明度 (0.1 - 1.0)",

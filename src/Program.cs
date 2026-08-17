@@ -25,7 +25,7 @@ public static class Program
         }
 
         bool createdNew;
-        Mutex mutex = new Mutex(true, "Local\\cursor-ime-mode", out createdNew);
+        Mutex mutex = new Mutex(true, "Local\\caret-ime-badge", out createdNew);
         if (!createdNew)
         {
             return 0;
