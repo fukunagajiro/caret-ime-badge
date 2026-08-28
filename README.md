@@ -99,12 +99,13 @@ exe と同じディレクトリの `settings.ini`（初回起動時に自動生�
 | エクスプローラー（F2 名前変更、Win32 `Edit`） | MSAA | 実測 `(460,441) 1x15`。安定して動作する。**Windows 11 の検索ボックス・アドレスバーとは別物**（下記参照） |
 | エクスプローラー（アドレスバー） | UIA（間欠的） | `InputSiteWindowClass`／UIA `ControlType.Edit`。実測で矩形が3通りに割れた: `17x19`（妥当性ガード通過、バッジが出る）、`220x19`（要素全体、棄却）、矩形なし。タイミング依存で確実ではない |
 | Microsoft Edge | MSAA | UI Automation もこのフィールドに応答するが、位置がずれた矩形を返す。MSAA を先に試す実装が意味を持つのはこのため |
+| Google Chrome | 未計測（MSAA と推定） | バッジがキャレット横に出ることを確認済み。キャレット矩形の取得元は計測していない。Edge と同じ Chromium であるため MSAA と推定する |
 | Visual Studio Code | MSAA | キャレット矩形 `1x19`。UI Automation は行全体の矩形（実測 `1132x19`）を返してしまい、妥当性ガード（幅が高さの4倍を超える矩形を却下する）で棄却される |
 | Windows Terminal | UI Automation | MSAA はキャレットを取得できず失敗する。UI Automation にフォールバックして `9x19` を得るが、プロンプト描画にあわせて矩形が動くためバッジがごく一瞬で消えることがある（既知の制約を参照） |
 
 **エクスプローラーで一切動作しないもの**: Windows 11 の検索ボックス（XAML、`InputSiteWindowClass`、UIA `ControlType.Pane`）は MSAA が全ゼロの矩形を返し、UIA も `TextPattern` に応答しないため、バッジは一切出ない（実測 `focusCls=InputSiteWindowClass`、MSAA role `CLIENT(0x0A)`、`OBJID_CARET` 全ゼロ）。ファイル一覧（`DirectUIHWND`、role `LISTITEM(0x22)`）も同様に全ゼロで、こちらは編集不可なコントロールなので意図通り出ない。アドレスバーは同じ `InputSiteWindowClass` だが UIA `TextPattern` に応答する点が異なり、上表の通り間欠的に動作する — 検索ボックスと混同しないこと。これらは以前「エクスプローラー検索欄で動作する」と誤って記載していたことの訂正であり、未検証のまま `focusCls=Edit` の観測結果から推測したのが誤りの原因だった。
 
-Chrome と Cursor は開発中に実測セッションを記録していない。どちらも Edge（Chromium）・VS Code（Electron）と同じレンダリングエンジンを使うため同様に動作すると**予想**されるが、**確認はしていない**。Slack・Discord・Teams は開発機に未インストールのため未検証。
+Chrome は動作を確認済み（バッジがキャレット横に出ることを確認）。ただしキャレット矩形の取得元は計測しておらず、上表の取得元は Edge と同じ Chromium であることからの推定である。Cursor は実測セッションを記録していない。Edge（Chromium）・VS Code（Electron）と同じレンダリングエンジンを使うため同様に動作すると**予想**されるが、**確認はしていない**。Slack・Discord・Teams は開発機に未インストールのため未検証。
 
 ## 仕組み
 

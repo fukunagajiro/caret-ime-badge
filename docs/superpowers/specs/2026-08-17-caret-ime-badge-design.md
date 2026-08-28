@@ -31,7 +31,7 @@ Windows で文字を入力する前に IME の状態を確認したい。標準�
 
 \*2 当初「エクスプローラー検索欄」とラベル付けしていたが、これは未検証のまま `focusCls=Edit` という観測結果から推測した誤りだった。後日の再測定（`proc=explorer`）で切り分けたところ、実際に MSAA 経由で動作するのは F2 名前変更などの古典的な Win32 `Edit` コントロールであり、Windows 11 の検索ボックスは XAML 化された `InputSiteWindowClass` で、MSAA `accFocus` role は `CLIENT(0x0A)`、`OBJID_CARET` は全ゼロ、UIA もキャレットを提供しないため、バッジは出ない。これは今回の `CaretLocator` 修正による退行ではない — 修正が変えたのは「位置はあるが面積ゼロ」の矩形の扱いのみであり、全ゼロ矩形の経路（検索ボックスがたどる経路）は変更されていない。
 
-**未検証**: Chrome と Cursor は計測時に捕捉されなかった。いずれも Edge / VS Code と同じ `Chrome_WidgetWin_1` クラスの Chromium / Electron であり同等と**推論**するが、実測ではない。Slack / Discord / Teams は当該 PC に未インストールのため未検証。
+**未検証**: Cursor は計測時に捕捉されなかった。Edge / VS Code と同じ `Chrome_WidgetWin_1` クラスの Chromium / Electron であり同等と**推論**するが、実測ではない。Chrome は後日バッジが出ることを確認したが、キャレット矩形の取得元は計測していないため上表には追加しない。Slack / Discord / Teams は当該 PC に未インストールのため未検証。
 
 ### 2.2 IME 状態の取得
 
