@@ -41,6 +41,26 @@ Windows で文字を入力する前に IME の状態を確認できるように�
 
 アイコンのツールチップは通常 `caret-ime-badge` だが、フォーカス移動検知用のフック（`EVENT_OBJECT_FOCUS`）のインストールに失敗した場合は `caret-ime-badge (フォーカス検知が無効)` になる。これは「フォーカスが移った時にバッジを出す」という表示トリガーの片方が効いていないことを示す唯一のサインなので、動作がおかしいと感じたらまずここを見る。
 
+## 導入
+
+[Releases](https://github.com/fukunagajiro/caret-ime-badge/releases) から `caret-ime-badge.exe` を落とし、好きな場所に置いてダブルクリックする。インストーラは無い。exe 1 つで動く。
+
+- **必要なもの**: Windows と .NET Framework 4.x。Windows 10 / 11 には標準で入っている。追加のランタイムは要らない
+- **動作確認**: Windows 11（24H2 相当、1920×1080・100% スケーリング）。Windows 10 は未検証
+- **初回起動時**: exe と同じディレクトリに `settings.ini` が生成される
+- **終了**: 通知領域のアイコンを右クリックして「終了」
+- **アンインストール**: exe と `settings.ini` を消すだけ。レジストリには何も書かない
+
+署名していない exe なので、初回起動時に SmartScreen が警告を出す。「詳細情報」から実行できる。気になる場合は下記の手順で自分でビルドする。ビルドに必要なものは Windows に最初から入っている。
+
+### Windows へのサインイン時に起動する
+
+自動起動の設定は持っていない。常駐させたい場合は、スタートアップフォルダにショートカットを置く。
+
+```
+Win+R → shell:startup → ここに caret-ime-badge.exe のショートカットを作る
+```
+
 ## ビルド
 
 .NET SDK も NuGet も不要。`build.cmd` は Windows にプリインストールされている C# コンパイラ（`C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`）を直接呼び出してビルドする。
