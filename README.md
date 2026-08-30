@@ -4,6 +4,8 @@ Windows で文字を入力する前に IME の状態を確認できるように�
 
 タスクバーの通知領域は入力位置から遠く、視線移動が大きい。このツールは視線を入力位置から動かさずに状態を確認できるようにする。
 
+設計の経緯と実測は Zenn の記事「[キャレットの横に IME の状態を表示する常駐ツールを作った](https://zenn.dev/fukunagajiro/articles/caret-ime-badge)」にある。
+
 ![Edge のフォームで入力欄を 3 つ移ると、そのたびにキャレットの左上へ緑のバッジが出て、あ・ア・ｱ と変わり、それぞれ 1 秒ほどで消える様子](demo.gif)
 
 上の GIF で IME を切り替えているのは別プロジェクトの [data-ime-mode](https://github.com/fukunagajiro/data-ime-mode) であり、本ツールが行うのは表示だけである。
